@@ -7,14 +7,15 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 
 public final class GreenButton extends AbstractButton {
-    private static final int GREEN = 0xFF48D17A;
-    private static final int GREEN_HOVER = 0xFF65E394;
-    private static final int DARK = 0xFF18251E;
-    private static final int DARK_HOVER = 0xFF22372B;
-    private static final int BORDER = 0xFF3C6650;
-    private static final int DISABLED = 0xFF26332B;
+    private static final int PRIMARY = 0xFF267A4B;
+    private static final int PRIMARY_HOVER = 0xFF319A5E;
+    private static final int DARK = 0xFF17231D;
+    private static final int DARK_HOVER = 0xFF20342A;
+    private static final int BORDER = 0xFF3B5D4B;
+    private static final int DISABLED = 0xFF222D27;
     private static final int TEXT = 0xFFF4FFF7;
-    private static final int DARK_TEXT = 0xFF102018;
+    private static final int MUTED = 0xFF77877D;
+    private static final int ACCENT = 0xFF55DC86;
 
     private final Runnable action;
     private final boolean primary;
@@ -49,21 +50,25 @@ public final class GreenButton extends AbstractButton {
         if (!active) {
             fill = DISABLED;
             border = 0xFF34433A;
-            textColor = 0xFF7F9186;
-        } else if (primary || selected) {
-            fill = highlighted ? GREEN_HOVER : GREEN;
-            border = highlighted ? 0xFFA4F4BC : GREEN;
-            textColor = DARK_TEXT;
+            textColor = MUTED;
+        } else if (primary) {
+            fill = highlighted ? PRIMARY_HOVER : PRIMARY;
+            border = highlighted ? ACCENT : 0xFF39965F;
+            textColor = TEXT;
+        } else if (selected) {
+            fill = highlighted ? DARK_HOVER : DARK;
+            border = ACCENT;
+            textColor = TEXT;
         } else {
             fill = highlighted ? DARK_HOVER : DARK;
-            border = highlighted ? GREEN : BORDER;
+            border = highlighted ? ACCENT : BORDER;
             textColor = TEXT;
         }
 
         graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), fill);
         graphics.renderOutline(getX(), getY(), getWidth(), getHeight(), border);
         if (selected) {
-            graphics.fill(getX(), getY() + getHeight() - 2, getX() + getWidth(), getY() + getHeight(), GREEN_HOVER);
+            graphics.fill(getX() + 1, getY() + getHeight() - 3, getX() + getWidth() - 1, getY() + getHeight() - 1, ACCENT);
         }
         graphics.drawCenteredString(
                 Minecraft.getInstance().font,

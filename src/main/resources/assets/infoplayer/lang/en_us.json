@@ -24,5 +24,10 @@
   "screen.infoplayer.stat.position": "Координаты",
   "screen.infoplayer.stat.first_seen": "Первый вход",
   "screen.infoplayer.stat.last_seen": "Последняя активность",
-  "message.infoplayer.no_permission": "У вас нет прав для просмотра InfoPlayer."
+  "message.infoplayer.no_permission": "У вас нет прав для просмотра InfoPlayer.",
+  "message.infoplayer.no_permission_action": "У вас нет прав на изменение инвентаря.",
+  "message.infoplayer.player_offline": "Изменять инвентарь можно только у игрока в сети.",
+  "message.infoplayer.cannot_take_self": "Нельзя забирать предметы из собственного инвентаря через InfoPlayer.",
+  "message.infoplayer.inventory_full": "В вашем инвентаре нет места для этого предмета.",
+  "message.infoplayer.item_taken": "Получено: %s x%s. Игрок: %s."
 }

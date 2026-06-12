@@ -14,9 +14,9 @@ public final class ClientPayloadHandler {
     public static void handleList(ListResponsePayload payload, IPayloadContext context) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof PlayerListScreen screen) {
-            screen.updatePlayers(payload.players());
+            screen.updatePlayers(payload.administrator(), payload.players());
         } else {
-            minecraft.setScreen(new PlayerListScreen(payload.players()));
+            minecraft.setScreen(new PlayerListScreen(payload.administrator(), payload.players()));
         }
     }
 
@@ -25,10 +25,11 @@ public final class ClientPayloadHandler {
         if (minecraft.screen instanceof PlayerDetailScreen screen) {
             minecraft.setScreen(new PlayerDetailScreen(
                     screen.parentScreen(),
+                    payload.administrator(),
                     payload.player(),
                     screen.inventoryOpen()));
         } else {
-            minecraft.setScreen(new PlayerDetailScreen(minecraft.screen, payload.player()));
+            minecraft.setScreen(new PlayerDetailScreen(minecraft.screen, payload.administrator(), payload.player()));
         }
     }
 }

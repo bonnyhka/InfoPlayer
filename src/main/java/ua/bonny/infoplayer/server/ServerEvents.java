@@ -16,7 +16,6 @@ public final class ServerEvents {
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("infoplayer")
-                .requires(source -> source.hasPermission(2))
                 .executes(context -> {
                     PlayerInfoService.sendList(context.getSource().getPlayerOrException());
                     return Command.SINGLE_SUCCESS;

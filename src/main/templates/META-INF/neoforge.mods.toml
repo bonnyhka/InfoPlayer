@@ -46,7 +46,7 @@ authors="Bonny"
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-Зелёная административная панель с данными и инвентарями игроков.
+Зелёная панель статистики с данными и инвентарями игроков.
 '''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.

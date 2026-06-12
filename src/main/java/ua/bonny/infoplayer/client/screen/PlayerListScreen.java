@@ -28,24 +28,26 @@ public final class PlayerListScreen extends Screen {
     private static final int MUTED = 0xFFA8B8AE;
     private static final int OFFLINE = 0xFFE35D6A;
     private static final int GOLD = 0xFFF2C14E;
-    private static final int CARD_HEIGHT = 74;
+    private static final int CARD_HEIGHT = 82;
     private static final int GAP = 10;
-    private static final int CONTENT_TOP = 98;
+    private static final int CONTENT_TOP = 102;
 
     private final List<PlayerSummary> allPlayers = new ArrayList<>();
     private final List<PlayerSummary> filteredPlayers = new ArrayList<>();
     private final List<CardBounds> cardBounds = new ArrayList<>();
+    private boolean administrator;
     private EditBox searchBox;
     private GreenButton refreshButton;
     private int scrollOffset;
     private int maxScroll;
 
-    public PlayerListScreen(List<PlayerSummary> players) {
+    public PlayerListScreen(boolean administrator, List<PlayerSummary> players) {
         super(Component.translatable("screen.infoplayer.title"));
-        updatePlayers(players);
+        updatePlayers(administrator, players);
     }
 
-    public void updatePlayers(List<PlayerSummary> players) {
+    public void updatePlayers(boolean administrator, List<PlayerSummary> players) {
+        this.administrator = administrator;
         allPlayers.clear();
         allPlayers.addAll(players);
         applyFilter(searchBox == null ? "" : searchBox.getValue());
@@ -56,19 +58,20 @@ public final class PlayerListScreen extends Screen {
 
     @Override
     protected void init() {
-        int searchWidth = Math.min(260, Math.max(100, width - 190));
-        searchBox = new EditBox(font, 34, 58, searchWidth - 20, 18, Component.translatable("screen.infoplayer.search"));
-        searchBox.setHint(Component.translatable("screen.infoplayer.search"));
+        int fieldWidth = Math.min(250, Math.max(100, width - 230));
+        searchBox = new EditBox(font, 82, 66, fieldWidth - 52, 18, Component.literal("Имя игрока"));
+        searchBox.setHint(Component.literal("Имя игрока..."));
         searchBox.setMaxLength(32);
         searchBox.setBordered(false);
+        searchBox.setTextColor(TEXT);
         searchBox.setResponder(this::applyFilter);
         addRenderableWidget(searchBox);
 
         refreshButton = new GreenButton(
                 width - 132,
-                52,
+                56,
                 108,
-                28,
+                30,
                 Component.translatable("screen.infoplayer.refresh"),
                 true,
                 () -> {
@@ -94,15 +97,17 @@ public final class PlayerListScreen extends Screen {
         graphics.fillGradient(0, 0, width, 42, 0xFF173223, HEADER);
         graphics.fill(0, 41, width, 42, GREEN);
         graphics.drawString(font, title, 24, 10, TEXT, false);
-        graphics.drawString(font, Component.literal("Административная панель сервера"), 24, 24, MUTED, false);
+        graphics.drawString(font, Component.literal("Статистика игроков сервера"), 24, 24, MUTED, false);
 
         long online = allPlayers.stream().filter(PlayerSummary::online).count();
         Component counter = Component.translatable("screen.infoplayer.counter", online, allPlayers.size());
         graphics.drawString(font, counter, width - 24 - font.width(counter), 17, TEXT, false);
 
-        graphics.fill(24, 52, 24 + Math.min(260, Math.max(100, width - 190)), 80, CARD);
-        graphics.renderOutline(24, 52, Math.min(260, Math.max(100, width - 190)), 28, BORDER);
-        graphics.drawString(font, Component.literal("Поиск"), 30, 48, GREEN, false);
+        int fieldWidth = Math.min(250, Math.max(100, width - 230));
+        graphics.fill(24, 56, 24 + fieldWidth, 86, CARD);
+        graphics.renderOutline(24, 56, fieldWidth, 30, searchBox.isFocused() ? GREEN : BORDER);
+        graphics.fill(24, 56, 28, 86, searchBox.isFocused() ? GREEN : 0xFF3C6650);
+        graphics.drawString(font, Component.literal("Найти:"), 36, 67, MUTED, false);
 
         renderCards(graphics, mouseX, mouseY);
         for (Renderable renderable : renderables) {
@@ -118,8 +123,8 @@ public final class PlayerListScreen extends Screen {
     private void renderCards(GuiGraphics graphics, int mouseX, int mouseY) {
         cardBounds.clear();
         int availableWidth = Math.max(120, width - 48);
-        int columns = Math.max(1, Math.min(4, (availableWidth + GAP) / 250));
-        int cardWidth = (availableWidth - GAP * (columns - 1)) / columns;
+        int columns = Math.max(1, Math.min(4, (availableWidth + GAP) / 280));
+        int cardWidth = Math.min(300, (availableWidth - GAP * (columns - 1)) / columns);
         int rows = (filteredPlayers.size() + columns - 1) / columns;
         int viewportHeight = Math.max(0, height - CONTENT_TOP - 18);
         maxScroll = Math.max(0, rows * (CARD_HEIGHT + GAP) - GAP - viewportHeight);
@@ -142,21 +147,24 @@ public final class PlayerListScreen extends Screen {
             graphics.renderOutline(x, y, cardWidth, CARD_HEIGHT, hovered ? GREEN : BORDER);
             graphics.fill(x, y, x + 3, y + CARD_HEIGHT, player.online() ? GREEN : OFFLINE);
 
-            drawPlayerHead(graphics, player.profile(), x + 12, y + 12, 32);
-            graphics.drawString(font, player.profile().getName(), x + 52, y + 12, TEXT, false);
-            graphics.drawString(font, ClientFormat.lastSeen(player.online(), player.lastSeen()), x + 52, y + 27,
+            drawPlayerHead(graphics, player.profile(), x + 12, y + 14, 36);
+            graphics.drawString(font, player.profile().getName(), x + 58, y + 12, TEXT, false);
+            graphics.drawString(font, ClientFormat.lastSeen(player.online(), player.lastSeen()), x + 58, y + 27,
                     player.online() ? GREEN : OFFLINE, false);
 
             Component level = Component.translatable("screen.infoplayer.level.short", player.experienceLevel());
-            graphics.drawString(font, level, x + 52, y + 44, GOLD, false);
-            int progressX = x + 52;
-            int progressY = y + 59;
-            int progressWidth = Math.max(20, cardWidth - 64);
+            graphics.drawString(font, level, x + 58, y + 45, GOLD, false);
+            Component advancements = Component.literal(
+                    "Достижения: " + player.advancementsDone() + "/" + player.advancementsTotal());
+            graphics.drawString(font, advancements, x + cardWidth - 12 - font.width(advancements), y + 45, MUTED, false);
+            int progressX = x + 58;
+            int progressY = y + 65;
+            int progressWidth = Math.max(20, cardWidth - 70);
             float progress = player.advancementsTotal() == 0
                     ? 0
                     : (float) player.advancementsDone() / player.advancementsTotal();
-            graphics.fill(progressX, progressY, progressX + progressWidth, progressY + 4, 0xFF2C3931);
-            graphics.fill(progressX, progressY, progressX + Math.round(progressWidth * progress), progressY + 4, GREEN);
+            graphics.fill(progressX, progressY, progressX + progressWidth, progressY + 5, 0xFF2C3931);
+            graphics.fill(progressX, progressY, progressX + Math.round(progressWidth * progress), progressY + 5, GREEN);
             cardBounds.add(new CardBounds(x, y, cardWidth, CARD_HEIGHT, player));
         }
         graphics.disableScissor();
