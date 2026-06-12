@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import ua.bonny.infoplayer.client.screen.PlayerDetailScreen;
 import ua.bonny.infoplayer.client.screen.PlayerListScreen;
+import ua.bonny.infoplayer.client.screen.SettingsScreen;
 import ua.bonny.infoplayer.network.DetailResponsePayload;
 import ua.bonny.infoplayer.network.ListResponsePayload;
 
@@ -14,9 +15,23 @@ public final class ClientPayloadHandler {
     public static void handleList(ListResponsePayload payload, IPayloadContext context) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof PlayerListScreen screen) {
-            screen.updatePlayers(payload.administrator(), payload.players());
+            screen.updatePlayers(
+                    payload.administrator(),
+                    payload.showCoordinatesToPlayers(),
+                    payload.showInventoryToPlayers(),
+                    payload.players());
+        } else if (minecraft.screen instanceof SettingsScreen screen) {
+            screen.updateSettings(
+                    payload.administrator(),
+                    payload.showCoordinatesToPlayers(),
+                    payload.showInventoryToPlayers(),
+                    payload.players());
         } else {
-            minecraft.setScreen(new PlayerListScreen(payload.administrator(), payload.players()));
+            minecraft.setScreen(new PlayerListScreen(
+                    payload.administrator(),
+                    payload.showCoordinatesToPlayers(),
+                    payload.showInventoryToPlayers(),
+                    payload.players()));
         }
     }
 
@@ -26,10 +41,17 @@ public final class ClientPayloadHandler {
             minecraft.setScreen(new PlayerDetailScreen(
                     screen.parentScreen(),
                     payload.administrator(),
+                    payload.coordinatesVisible(),
+                    payload.inventoryVisible(),
                     payload.player(),
                     screen.selectedTab()));
         } else {
-            minecraft.setScreen(new PlayerDetailScreen(minecraft.screen, payload.administrator(), payload.player()));
+            minecraft.setScreen(new PlayerDetailScreen(
+                    minecraft.screen,
+                    payload.administrator(),
+                    payload.coordinatesVisible(),
+                    payload.inventoryVisible(),
+                    payload.player()));
         }
     }
 }

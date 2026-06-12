@@ -33,6 +33,8 @@ public final class PlayerDetailScreen extends Screen {
 
     private final Screen parent;
     private final boolean administrator;
+    private final boolean coordinatesVisible;
+    private final boolean inventoryVisible;
     private final PlayerDetail player;
     private final List<SlotBounds> inventorySlotBounds = new ArrayList<>();
     private RemotePlayer previewPlayer;
@@ -45,16 +47,29 @@ public final class PlayerDetailScreen extends Screen {
     private int maxScroll;
     private ItemStack hoveredStack = ItemStack.EMPTY;
 
-    public PlayerDetailScreen(Screen parent, boolean administrator, PlayerDetail player) {
-        this(parent, administrator, player, 0);
+    public PlayerDetailScreen(
+            Screen parent,
+            boolean administrator,
+            boolean coordinatesVisible,
+            boolean inventoryVisible,
+            PlayerDetail player) {
+        this(parent, administrator, coordinatesVisible, inventoryVisible, player, 0);
     }
 
-    public PlayerDetailScreen(Screen parent, boolean administrator, PlayerDetail player, int selectedTab) {
+    public PlayerDetailScreen(
+            Screen parent,
+            boolean administrator,
+            boolean coordinatesVisible,
+            boolean inventoryVisible,
+            PlayerDetail player,
+            int selectedTab) {
         super(Component.literal("Данные игрока"));
         this.parent = parent;
         this.administrator = administrator;
+        this.coordinatesVisible = coordinatesVisible;
+        this.inventoryVisible = inventoryVisible;
         this.player = player;
-        this.tab = Tab.fromId(selectedTab, !player.curios().isEmpty());
+        this.tab = Tab.fromId(selectedTab, inventoryVisible, !player.curios().isEmpty());
     }
 
     public Screen parentScreen() {
@@ -84,24 +99,26 @@ public final class PlayerDetailScreen extends Screen {
         addRenderableWidget(refreshButton);
 
         int tabsY = compact() ? 76 : 104;
-        boolean hasCurios = !player.curios().isEmpty();
+        boolean hasCurios = inventoryVisible && !player.curios().isEmpty();
         int buttonWidth = hasCurios ? 104 : 112;
         int gap = 8;
-        int buttonCount = hasCurios ? 3 : 2;
+        int buttonCount = inventoryVisible ? (hasCurios ? 3 : 2) : 1;
         int tabsWidth = buttonCount * buttonWidth + (buttonCount - 1) * gap;
         int tabsX = Math.max(18, (width - tabsWidth) / 2);
         overviewButton = new GreenButton(
                 tabsX, tabsY, buttonWidth, 26, Component.literal("Обзор"), false, () -> setTab(Tab.OVERVIEW));
-        inventoryButton = new GreenButton(
-                tabsX + buttonWidth + gap,
-                tabsY,
-                buttonWidth,
-                26,
-                Component.literal("Инвентарь"),
-                false,
-                () -> setTab(Tab.INVENTORY));
         addRenderableWidget(overviewButton);
-        addRenderableWidget(inventoryButton);
+        if (inventoryVisible) {
+            inventoryButton = new GreenButton(
+                    tabsX + buttonWidth + gap,
+                    tabsY,
+                    buttonWidth,
+                    26,
+                    Component.literal("Инвентарь"),
+                    false,
+                    () -> setTab(Tab.INVENTORY));
+            addRenderableWidget(inventoryButton);
+        }
         if (hasCurios) {
             curiosButton = new GreenButton(
                     tabsX + (buttonWidth + gap) * 2,
@@ -141,7 +158,9 @@ public final class PlayerDetailScreen extends Screen {
         scrollOffset = 0;
         if (overviewButton != null) {
             overviewButton.setSelected(tab == Tab.OVERVIEW);
-            inventoryButton.setSelected(tab == Tab.INVENTORY);
+            if (inventoryButton != null) {
+                inventoryButton.setSelected(tab == Tab.INVENTORY);
+            }
             if (curiosButton != null) {
                 curiosButton.setSelected(tab == Tab.CURIOS);
             }
@@ -509,7 +528,12 @@ public final class PlayerDetailScreen extends Screen {
         stats.add(line("Голод", player.foodLevel() + " / 20", 0xFFF1A95B));
         stats.add(line("Режим игры", player.gameMode(), TEXT));
         stats.add(line("Измерение", player.dimension(), 0xFF72B8F2));
-        stats.add(line("Координаты", String.format("%.1f, %.1f, %.1f", player.x(), player.y(), player.z()), TEXT));
+        if (coordinatesVisible) {
+            stats.add(line("Координаты", String.format("%.1f, %.1f, %.1f", player.x(), player.y(), player.z()), TEXT));
+        }
+        if (!inventoryVisible) {
+            stats.add(line("Инвентарь", "Скрыт настройками сервера", MUTED));
+        }
         stats.add(line("Первый вход", ClientFormat.date(player.firstSeen()), TEXT));
         stats.add(line("Последняя активность", ClientFormat.date(summary.lastSeen()), TEXT));
         return stats;
@@ -575,11 +599,11 @@ public final class PlayerDetailScreen extends Screen {
             this.id = id;
         }
 
-        private static Tab fromId(int id, boolean hasCurios) {
-            if (id == CURIOS.id && hasCurios) {
+        private static Tab fromId(int id, boolean inventoryVisible, boolean hasCurios) {
+            if (id == CURIOS.id && inventoryVisible && hasCurios) {
                 return CURIOS;
             }
-            return id == INVENTORY.id ? INVENTORY : OVERVIEW;
+            return id == INVENTORY.id && inventoryVisible ? INVENTORY : OVERVIEW;
         }
     }
 

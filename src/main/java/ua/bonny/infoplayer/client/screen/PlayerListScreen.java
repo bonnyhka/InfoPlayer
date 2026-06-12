@@ -36,18 +36,35 @@ public final class PlayerListScreen extends Screen {
     private final List<PlayerSummary> filteredPlayers = new ArrayList<>();
     private final List<CardBounds> cardBounds = new ArrayList<>();
     private boolean administrator;
+    private boolean showCoordinatesToPlayers;
+    private boolean showInventoryToPlayers;
     private EditBox searchBox;
     private GreenButton refreshButton;
+    private GreenButton settingsButton;
     private int scrollOffset;
     private int maxScroll;
 
-    public PlayerListScreen(boolean administrator, List<PlayerSummary> players) {
+    public PlayerListScreen(
+            boolean administrator,
+            boolean showCoordinatesToPlayers,
+            boolean showInventoryToPlayers,
+            List<PlayerSummary> players) {
         super(Component.translatable("screen.infoplayer.title"));
-        updatePlayers(administrator, players);
+        updatePlayers(
+                administrator,
+                showCoordinatesToPlayers,
+                showInventoryToPlayers,
+                players);
     }
 
-    public void updatePlayers(boolean administrator, List<PlayerSummary> players) {
+    public void updatePlayers(
+            boolean administrator,
+            boolean showCoordinatesToPlayers,
+            boolean showInventoryToPlayers,
+            List<PlayerSummary> players) {
         this.administrator = administrator;
+        this.showCoordinatesToPlayers = showCoordinatesToPlayers;
+        this.showInventoryToPlayers = showInventoryToPlayers;
         allPlayers.clear();
         allPlayers.addAll(players);
         applyFilter(searchBox == null ? "" : searchBox.getValue());
@@ -58,7 +75,10 @@ public final class PlayerListScreen extends Screen {
 
     @Override
     protected void init() {
-        int fieldWidth = Math.min(250, Math.max(100, width - 230));
+        boolean compactAdminToolbar = administrator && width < 500;
+        int fieldWidth = compactAdminToolbar
+                ? Math.max(100, width - 48)
+                : Math.min(250, Math.max(100, width - (administrator ? 350 : 230)));
         searchBox = new EditBox(font, 82, 66, fieldWidth - 52, 18, Component.literal("Имя игрока"));
         searchBox.setHint(Component.literal("Имя игрока..."));
         searchBox.setMaxLength(32);
@@ -68,8 +88,8 @@ public final class PlayerListScreen extends Screen {
         addRenderableWidget(searchBox);
 
         refreshButton = new GreenButton(
-                width - 132,
-                56,
+                compactAdminToolbar ? 140 : width - 132,
+                compactAdminToolbar ? 94 : 56,
                 108,
                 30,
                 Component.translatable("screen.infoplayer.refresh"),
@@ -79,6 +99,21 @@ public final class PlayerListScreen extends Screen {
             PacketDistributor.sendToServer(new ListRequestPayload());
         });
         addRenderableWidget(refreshButton);
+
+        if (administrator) {
+            settingsButton = new GreenButton(
+                    compactAdminToolbar ? 24 : width - 248,
+                    compactAdminToolbar ? 94 : 56,
+                    108,
+                    30,
+                    Component.literal("Настройки"),
+                    false,
+                    () -> minecraft.setScreen(new SettingsScreen(
+                            this,
+                            showCoordinatesToPlayers,
+                            showInventoryToPlayers)));
+            addRenderableWidget(settingsButton);
+        }
     }
 
     private void applyFilter(String query) {
@@ -116,33 +151,34 @@ public final class PlayerListScreen extends Screen {
 
         if (filteredPlayers.isEmpty()) {
             Component empty = Component.translatable("screen.infoplayer.empty");
-            graphics.drawCenteredString(font, empty, width / 2, CONTENT_TOP + 32, MUTED);
+            graphics.drawCenteredString(font, empty, width / 2, contentTop() + 32, MUTED);
         }
     }
 
     private void renderCards(GuiGraphics graphics, int mouseX, int mouseY) {
         cardBounds.clear();
+        int contentTop = contentTop();
         int availableWidth = Math.max(120, width - 48);
         int columns = Math.max(1, Math.min(4, (availableWidth + GAP) / 280));
         int cardWidth = Math.min(300, (availableWidth - GAP * (columns - 1)) / columns);
         int rows = (filteredPlayers.size() + columns - 1) / columns;
-        int viewportHeight = Math.max(0, height - CONTENT_TOP - 18);
+        int viewportHeight = Math.max(0, height - contentTop - 18);
         maxScroll = Math.max(0, rows * (CARD_HEIGHT + GAP) - GAP - viewportHeight);
         scrollOffset = Math.min(scrollOffset, maxScroll);
 
-        graphics.enableScissor(0, CONTENT_TOP, width, height - 10);
+        graphics.enableScissor(0, contentTop, width, height - 10);
         for (int index = 0; index < filteredPlayers.size(); index++) {
             int column = index % columns;
             int row = index / columns;
             int x = 24 + column * (cardWidth + GAP);
-            int y = CONTENT_TOP + row * (CARD_HEIGHT + GAP) - scrollOffset;
-            if (y + CARD_HEIGHT < CONTENT_TOP || y > height) {
+            int y = contentTop + row * (CARD_HEIGHT + GAP) - scrollOffset;
+            if (y + CARD_HEIGHT < contentTop || y > height) {
                 continue;
             }
 
             PlayerSummary player = filteredPlayers.get(index);
             boolean hovered = mouseX >= x && mouseX < x + cardWidth && mouseY >= y
-                    && mouseY < y + CARD_HEIGHT && mouseY >= CONTENT_TOP;
+                    && mouseY < y + CARD_HEIGHT && mouseY >= contentTop;
             graphics.fill(x, y, x + cardWidth, y + CARD_HEIGHT, hovered ? CARD_HOVER : CARD);
             graphics.renderOutline(x, y, cardWidth, CARD_HEIGHT, hovered ? GREEN : BORDER);
             graphics.fill(x, y, x + 3, y + CARD_HEIGHT, player.online() ? GREEN : OFFLINE);
@@ -170,8 +206,8 @@ public final class PlayerListScreen extends Screen {
         graphics.disableScissor();
 
         if (maxScroll > 0) {
-            int trackY = CONTENT_TOP;
-            int trackHeight = Math.max(10, height - CONTENT_TOP - 12);
+            int trackY = contentTop;
+            int trackHeight = Math.max(10, height - contentTop - 12);
             int thumbHeight = Math.max(18, trackHeight * trackHeight / (trackHeight + maxScroll));
             int thumbY = trackY + (trackHeight - thumbHeight) * scrollOffset / maxScroll;
             graphics.fill(width - 7, trackY, width - 4, trackY + trackHeight, 0xFF26332B);
@@ -201,7 +237,7 @@ public final class PlayerListScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (maxScroll > 0 && mouseY >= CONTENT_TOP) {
+        if (maxScroll > 0 && mouseY >= contentTop()) {
             scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) Math.round(verticalAmount * 28)));
             return true;
         }
@@ -217,5 +253,9 @@ public final class PlayerListScreen extends Screen {
         boolean contains(double mouseX, double mouseY) {
             return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
         }
+    }
+
+    private int contentTop() {
+        return administrator && width < 500 ? 138 : CONTENT_TOP;
     }
 }

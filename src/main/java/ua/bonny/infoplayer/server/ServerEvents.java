@@ -24,6 +24,7 @@ public final class ServerEvents {
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
+        InfoPlayerSettings.load(event.getServer());
         PlayerDataStore.load(event.getServer());
         event.getServer().getPlayerList().getPlayers().forEach(player -> PlayerDataStore.capture(player, false));
     }
@@ -48,5 +49,6 @@ public final class ServerEvents {
     public static void onServerStopping(ServerStoppingEvent event) {
         event.getServer().getPlayerList().getPlayers().forEach(player -> PlayerDataStore.capture(player, false));
         PlayerDataStore.save();
+        InfoPlayerSettings.save();
     }
 }

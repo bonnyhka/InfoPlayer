@@ -1,5 +1,6 @@
 package ua.bonny.infoplayer.server;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -9,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.PacketDistributor;
+import ua.bonny.infoplayer.data.PlayerDetail;
 import ua.bonny.infoplayer.data.PlayerSummary;
 import ua.bonny.infoplayer.network.DetailResponsePayload;
 import ua.bonny.infoplayer.network.ListResponsePayload;
@@ -25,7 +27,11 @@ public final class PlayerInfoService {
                 .sorted(Comparator.comparing(PlayerSummary::online).reversed()
                         .thenComparing(summary -> summary.profile().getName(), String.CASE_INSENSITIVE_ORDER))
                 .toList();
-        PacketDistributor.sendToPlayer(requester, new ListResponsePayload(isAdmin(requester), players));
+        PacketDistributor.sendToPlayer(requester, new ListResponsePayload(
+                isAdmin(requester),
+                InfoPlayerSettings.showCoordinatesToPlayers(),
+                InfoPlayerSettings.showInventoryToPlayers(),
+                players));
     }
 
     public static void sendDetail(ServerPlayer requester, UUID playerId) {
@@ -35,11 +41,38 @@ public final class PlayerInfoService {
                 ? PlayerDataStore.capture(onlinePlayer, false)
                 : PlayerDataStore.get(playerId);
         if (stored != null) {
+            boolean administrator = isAdmin(requester);
+            boolean ownProfile = requester.getUUID().equals(playerId);
+            boolean coordinatesVisible = administrator
+                    || ownProfile
+                    || InfoPlayerSettings.showCoordinatesToPlayers();
+            boolean inventoryVisible = administrator
+                    || ownProfile
+                    || InfoPlayerSettings.showInventoryToPlayers();
+            PlayerDetail detail = applyVisibility(
+                    stored.detail(onlinePlayer != null, server.registryAccess()),
+                    coordinatesVisible,
+                    inventoryVisible);
             PacketDistributor.sendToPlayer(requester,
                     new DetailResponsePayload(
-                            isAdmin(requester),
-                            stored.detail(onlinePlayer != null, server.registryAccess())));
+                            administrator,
+                            coordinatesVisible,
+                            inventoryVisible,
+                            detail));
         }
+    }
+
+    public static void updateSettings(
+            ServerPlayer requester,
+            boolean showCoordinatesToPlayers,
+            boolean showInventoryToPlayers) {
+        if (!isAdmin(requester)) {
+            requester.sendSystemMessage(Component.translatable("message.infoplayer.no_permission_settings"));
+            return;
+        }
+        InfoPlayerSettings.update(showCoordinatesToPlayers, showInventoryToPlayers);
+        requester.sendSystemMessage(Component.translatable("message.infoplayer.settings_saved"));
+        sendList(requester);
     }
 
     public static void takeItem(
@@ -125,6 +158,33 @@ public final class PlayerInfoService {
             }
         }
         return available;
+    }
+
+    private static PlayerDetail applyVisibility(
+            PlayerDetail detail,
+            boolean coordinatesVisible,
+            boolean inventoryVisible) {
+        List<ItemStack> inventory = detail.inventory();
+        if (!inventoryVisible) {
+            List<ItemStack> hiddenInventory = new ArrayList<>(41);
+            for (int index = 0; index < 41; index++) {
+                hiddenInventory.add(ItemStack.EMPTY);
+            }
+            inventory = List.copyOf(hiddenInventory);
+        }
+        return new PlayerDetail(
+                detail.summary(),
+                detail.firstSeen(),
+                detail.health(),
+                detail.foodLevel(),
+                detail.gameMode(),
+                detail.dimension(),
+                coordinatesVisible ? detail.x() : 0,
+                coordinatesVisible ? detail.y() : 0,
+                coordinatesVisible ? detail.z() : 0,
+                inventoryVisible ? detail.selectedSlot() : 0,
+                inventory,
+                inventoryVisible ? detail.curios() : List.of());
     }
 
     private static void moveToInventory(ServerPlayer player, ItemStack remaining) {

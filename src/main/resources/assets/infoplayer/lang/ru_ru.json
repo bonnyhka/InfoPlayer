@@ -30,5 +30,7 @@
   "message.infoplayer.cannot_take_self": "Нельзя забирать предметы из собственного инвентаря через InfoPlayer.",
   "message.infoplayer.inventory_full": "В вашем инвентаре нет места для этого предмета.",
   "message.infoplayer.curio_locked": "Этот аксессуар нельзя снять с игрока.",
-  "message.infoplayer.item_taken": "Получено: %s x%s. Игрок: %s."
+  "message.infoplayer.item_taken": "Получено: %s x%s. Игрок: %s.",
+  "message.infoplayer.no_permission_settings": "У вас нет прав на изменение настроек InfoPlayer.",
+  "message.infoplayer.settings_saved": "Настройки доступа InfoPlayer сохранены."
 }
