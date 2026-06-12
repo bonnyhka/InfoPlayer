@@ -1,39 +1,42 @@
 # InfoPlayer
 
-Administrative player panel for Minecraft 1.21.1 and NeoForge 21.1.233.
+Административная панель игроков для Minecraft 1.21.1 и NeoForge 21.1.233.
 
-## Features
+## Возможности
 
-- `/infoplayer` opens the panel for administrators with permission level 2 or higher.
-- Shows online and previously seen players.
-- Displays player skin, name, status, experience level, total experience, play time and advancement progress.
-- Opens a detailed profile with health, food, game mode, dimension, coordinates and activity dates.
-- Stores the latest offline snapshot in `<world>/infoplayer_players.json`.
-- Checks permissions on the server for both the command and network requests.
-- Includes Russian and English localization.
+- Команда `/infoplayer` открывает панель только администраторам с уровнем прав 2 или выше.
+- Список игроков в сети и игроков, которые ранее заходили на сервер.
+- Скин, имя, статус, уровень, общий опыт, наигранное время и прогресс достижений.
+- Подробная карточка со здоровьем, голодом, режимом игры, измерением, координатами и датами активности.
+- Просмотр полного инвентаря, хотбара, брони и левой руки.
+- Для офлайн-игроков показывается последний сохранённый снимок инвентаря.
+- Полностью кастомный зелёный интерфейс и собственные кнопки.
+- Все подписи интерфейса на русском языке.
+- Серверная проверка прав для команды и каждого сетевого запроса.
+- Данные сохраняются в `<папка мира>/infoplayer_players.json`.
 
-## Installation
+## Установка
 
-Install the same mod JAR on the NeoForge 1.21.1 server and every administrator's client. Restart the server, grant the administrator operator permission level 2 or higher, then run:
+Один и тот же JAR-файл должен быть установлен на сервер и на клиенты администраторов. После перезапуска сервера выдайте администратору уровень прав 2 или выше и используйте:
 
 ```text
 /infoplayer
 ```
 
-## Build
+## Сборка
 
-Java 21 is required.
+Требуется Java 21.
 
 ```powershell
 .\gradlew.bat build
 ```
 
-The finished JAR is written to `build/libs/infoplayer-1.0.0.jar`.
+Готовый файл появится в `build/libs/infoplayer-1.1.0.jar`.
 
-## Data
+## Важно
 
-InfoPlayer begins collecting player history after it is installed. It cannot reconstruct exact last-seen times from before installation.
+История игроков начинает собираться после установки мода. Точное время последнего входа до установки восстановить невозможно.
 
-## License
+## Лицензия
 
-All Rights Reserved. See [LICENSE](LICENSE).
+Все права защищены. Условия находятся в файле [LICENSE](LICENSE).

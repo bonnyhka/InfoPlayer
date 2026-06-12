@@ -2,7 +2,13 @@ package ua.bonny.infoplayer.server;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.world.item.ItemStack;
 import ua.bonny.infoplayer.data.PlayerDetail;
 import ua.bonny.infoplayer.data.PlayerSummary;
 
@@ -25,6 +31,8 @@ final class StoredPlayer {
     double x;
     double y;
     double z;
+    int selectedSlot;
+    List<String> inventory = new ArrayList<>();
 
     StoredPlayer() {
     }
@@ -53,16 +61,58 @@ final class StoredPlayer {
                 advancementsTotal);
     }
 
-    PlayerDetail detail(boolean online) {
+    PlayerDetail detail(boolean online, HolderLookup.Provider registries) {
         return new PlayerDetail(
                 summary(online),
                 firstSeen,
                 health,
                 foodLevel,
-                gameMode == null ? "unknown" : gameMode,
-                dimension == null ? "minecraft:overworld" : dimension,
+                russianGameMode(),
+                russianDimension(),
                 x,
                 y,
-                z);
+                z,
+                selectedSlot,
+                decodeInventory(registries));
+    }
+
+    private List<ItemStack> decodeInventory(HolderLookup.Provider registries) {
+        List<ItemStack> result = new ArrayList<>(41);
+        for (String encoded : inventory == null ? List.<String>of() : inventory) {
+            try {
+                result.add(ItemStack.parseOptional(registries, TagParser.parseTag(encoded)));
+            } catch (CommandSyntaxException exception) {
+                result.add(ItemStack.EMPTY);
+            }
+        }
+        while (result.size() < 41) {
+            result.add(ItemStack.EMPTY);
+        }
+        return List.copyOf(result.subList(0, 41));
+    }
+
+    private String russianGameMode() {
+        if (gameMode == null) {
+            return "Неизвестно";
+        }
+        return switch (gameMode) {
+            case "survival" -> "Выживание";
+            case "creative" -> "Творческий";
+            case "adventure" -> "Приключение";
+            case "spectator" -> "Наблюдатель";
+            default -> gameMode;
+        };
+    }
+
+    private String russianDimension() {
+        if (dimension == null) {
+            return "Обычный мир";
+        }
+        return switch (dimension) {
+            case "minecraft:overworld" -> "Обычный мир";
+            case "minecraft:the_nether" -> "Незер";
+            case "minecraft:the_end" -> "Энд";
+            default -> dimension;
+        };
     }
 }

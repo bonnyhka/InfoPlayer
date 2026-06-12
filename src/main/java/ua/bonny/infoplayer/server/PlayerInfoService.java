@@ -43,7 +43,8 @@ public final class PlayerInfoService {
                 ? PlayerDataStore.capture(onlinePlayer, false)
                 : PlayerDataStore.get(playerId);
         if (stored != null) {
-            PacketDistributor.sendToPlayer(requester, new DetailResponsePayload(stored.detail(onlinePlayer != null)));
+            PacketDistributor.sendToPlayer(requester,
+                    new DetailResponsePayload(stored.detail(onlinePlayer != null, server.registryAccess())));
         }
     }
 

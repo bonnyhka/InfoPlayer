@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.gui.components.Renderable;
@@ -16,6 +15,7 @@ import ua.bonny.infoplayer.client.ClientFormat;
 import ua.bonny.infoplayer.data.PlayerSummary;
 import ua.bonny.infoplayer.network.DetailRequestPayload;
 import ua.bonny.infoplayer.network.ListRequestPayload;
+import ua.bonny.infoplayer.client.widget.GreenButton;
 
 public final class PlayerListScreen extends Screen {
     private static final int BACKGROUND = 0xFF0E1511;
@@ -30,13 +30,13 @@ public final class PlayerListScreen extends Screen {
     private static final int GOLD = 0xFFF2C14E;
     private static final int CARD_HEIGHT = 74;
     private static final int GAP = 10;
-    private static final int CONTENT_TOP = 86;
+    private static final int CONTENT_TOP = 98;
 
     private final List<PlayerSummary> allPlayers = new ArrayList<>();
     private final List<PlayerSummary> filteredPlayers = new ArrayList<>();
     private final List<CardBounds> cardBounds = new ArrayList<>();
     private EditBox searchBox;
-    private Button refreshButton;
+    private GreenButton refreshButton;
     private int scrollOffset;
     private int maxScroll;
 
@@ -56,17 +56,25 @@ public final class PlayerListScreen extends Screen {
 
     @Override
     protected void init() {
-        int searchWidth = Math.min(230, Math.max(100, width - 190));
-        searchBox = new EditBox(font, 24, 48, searchWidth, 22, Component.translatable("screen.infoplayer.search"));
+        int searchWidth = Math.min(260, Math.max(100, width - 190));
+        searchBox = new EditBox(font, 34, 58, searchWidth - 20, 18, Component.translatable("screen.infoplayer.search"));
         searchBox.setHint(Component.translatable("screen.infoplayer.search"));
         searchBox.setMaxLength(32);
+        searchBox.setBordered(false);
         searchBox.setResponder(this::applyFilter);
         addRenderableWidget(searchBox);
 
-        refreshButton = Button.builder(Component.translatable("screen.infoplayer.refresh"), button -> {
-            button.active = false;
+        refreshButton = new GreenButton(
+                width - 132,
+                52,
+                108,
+                28,
+                Component.translatable("screen.infoplayer.refresh"),
+                true,
+                () -> {
+            refreshButton.active = false;
             PacketDistributor.sendToServer(new ListRequestPayload());
-        }).bounds(width - 126, 48, 102, 22).build();
+        });
         addRenderableWidget(refreshButton);
     }
 
@@ -83,13 +91,18 @@ public final class PlayerListScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, BACKGROUND);
-        graphics.fill(0, 0, width, 38, HEADER);
-        graphics.fill(0, 37, width, 38, GREEN);
-        graphics.drawString(font, title, 24, 14, TEXT, false);
+        graphics.fillGradient(0, 0, width, 42, 0xFF173223, HEADER);
+        graphics.fill(0, 41, width, 42, GREEN);
+        graphics.drawString(font, title, 24, 10, TEXT, false);
+        graphics.drawString(font, Component.literal("Административная панель сервера"), 24, 24, MUTED, false);
 
         long online = allPlayers.stream().filter(PlayerSummary::online).count();
         Component counter = Component.translatable("screen.infoplayer.counter", online, allPlayers.size());
-        graphics.drawString(font, counter, width - 24 - font.width(counter), 14, MUTED, false);
+        graphics.drawString(font, counter, width - 24 - font.width(counter), 17, TEXT, false);
+
+        graphics.fill(24, 52, 24 + Math.min(260, Math.max(100, width - 190)), 80, CARD);
+        graphics.renderOutline(24, 52, Math.min(260, Math.max(100, width - 190)), 28, BORDER);
+        graphics.drawString(font, Component.literal("Поиск"), 30, 48, GREEN, false);
 
         renderCards(graphics, mouseX, mouseY);
         for (Renderable renderable : renderables) {

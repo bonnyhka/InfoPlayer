@@ -23,7 +23,10 @@ public final class ClientPayloadHandler {
     public static void handleDetail(DetailResponsePayload payload, IPayloadContext context) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof PlayerDetailScreen screen) {
-            minecraft.setScreen(new PlayerDetailScreen(screen.parentScreen(), payload.player()));
+            minecraft.setScreen(new PlayerDetailScreen(
+                    screen.parentScreen(),
+                    payload.player(),
+                    screen.inventoryOpen()));
         } else {
             minecraft.setScreen(new PlayerDetailScreen(minecraft.screen, payload.player()));
         }

@@ -19,6 +19,7 @@ import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,6 +102,17 @@ final class PlayerDataStore {
         stored.x = player.getX();
         stored.y = player.getY();
         stored.z = player.getZ();
+        stored.selectedSlot = player.getInventory().selected;
+        stored.inventory = new ArrayList<>(41);
+        for (ItemStack stack : player.getInventory().items) {
+            stored.inventory.add(stack.saveOptional(player.registryAccess()).toString());
+        }
+        for (ItemStack stack : player.getInventory().armor) {
+            stored.inventory.add(stack.saveOptional(player.registryAccess()).toString());
+        }
+        for (ItemStack stack : player.getInventory().offhand) {
+            stored.inventory.add(stack.saveOptional(player.registryAccess()).toString());
+        }
 
         int done = 0;
         int total = 0;

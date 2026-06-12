@@ -1,7 +1,7 @@
 {
   "screen.infoplayer.title": "InfoPlayer | Панель игроков",
   "screen.infoplayer.details": "Данные игрока",
-  "screen.infoplayer.search": "Поиск игрока...",
+  "screen.infoplayer.search": "Введите имя игрока...",
   "screen.infoplayer.refresh": "Обновить",
   "screen.infoplayer.back": "Назад",
   "screen.infoplayer.counter": "В сети: %s | Всего: %s",
