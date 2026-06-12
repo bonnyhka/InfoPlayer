@@ -14,7 +14,7 @@ public final class InfoPlayerNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("3");
+        PayloadRegistrar registrar = event.registrar("4");
         registrar.playToServer(ListRequestPayload.TYPE, ListRequestPayload.STREAM_CODEC, (payload, context) -> {
             if (context.player() instanceof ServerPlayer player) {
                 PlayerInfoService.sendList(player);
@@ -29,7 +29,12 @@ public final class InfoPlayerNetwork {
         registrar.playToClient(DetailResponsePayload.TYPE, DetailResponsePayload.STREAM_CODEC, InfoPlayerNetwork::handleDetail);
         registrar.playToServer(TakeItemRequestPayload.TYPE, TakeItemRequestPayload.STREAM_CODEC, (payload, context) -> {
             if (context.player() instanceof ServerPlayer player) {
-                PlayerInfoService.takeItem(player, payload.playerId(), payload.slotIndex());
+                PlayerInfoService.takeItem(
+                        player,
+                        payload.playerId(),
+                        payload.slotIndex(),
+                        payload.curiosType(),
+                        payload.cosmetic());
             }
         });
     }

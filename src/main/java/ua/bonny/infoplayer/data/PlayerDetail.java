@@ -16,9 +16,11 @@ public record PlayerDetail(
         double y,
         double z,
         int selectedSlot,
-        List<ItemStack> inventory) {
+        List<ItemStack> inventory,
+        List<CurioSlot> curios) {
 
     private static final int INVENTORY_SIZE = 41;
+    private static final int MAX_CURIO_SLOTS = 256;
 
     public static PlayerDetail decode(RegistryFriendlyByteBuf buffer) {
         PlayerSummary summary = PlayerSummary.decode(buffer);
@@ -42,9 +44,17 @@ public record PlayerDetail(
         while (inventory.size() < INVENTORY_SIZE) {
             inventory.add(ItemStack.EMPTY);
         }
+        int curiosSize = buffer.readVarInt();
+        if (curiosSize < 0 || curiosSize > MAX_CURIO_SLOTS) {
+            throw new IllegalArgumentException("Invalid InfoPlayer Curios inventory size: " + curiosSize);
+        }
+        List<CurioSlot> curios = new ArrayList<>(curiosSize);
+        for (int i = 0; i < curiosSize; i++) {
+            curios.add(CurioSlot.decode(buffer));
+        }
         return new PlayerDetail(
                 summary, firstSeen, health, foodLevel, gameMode, dimension, x, y, z,
-                selectedSlot, List.copyOf(inventory));
+                selectedSlot, List.copyOf(inventory), List.copyOf(curios));
     }
 
     public void encode(RegistryFriendlyByteBuf buffer) {
@@ -60,5 +70,7 @@ public record PlayerDetail(
         buffer.writeVarInt(selectedSlot);
         buffer.writeVarInt(Math.min(inventory.size(), INVENTORY_SIZE));
         inventory.stream().limit(INVENTORY_SIZE).forEach(stack -> ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, stack));
+        buffer.writeVarInt(Math.min(curios.size(), MAX_CURIO_SLOTS));
+        curios.stream().limit(MAX_CURIO_SLOTS).forEach(slot -> slot.encode(buffer));
     }
 }

@@ -20,6 +20,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.fml.ModList;
 import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +113,14 @@ final class PlayerDataStore {
         }
         for (ItemStack stack : player.getInventory().offhand) {
             stored.inventory.add(stack.saveOptional(player.registryAccess()).toString());
+        }
+        stored.curios = new ArrayList<>();
+        if (ModList.get().isLoaded("curios")) {
+            CuriosCompatibility.capture(player).forEach(slot -> stored.curios.add(new StoredCurioSlot(
+                    slot.identifier(),
+                    slot.index(),
+                    slot.cosmetic(),
+                    slot.stack().saveOptional(player.registryAccess()).toString())));
         }
 
         int done = 0;

@@ -13,6 +13,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ua.bonny.infoplayer.client.ClientFormat;
 import ua.bonny.infoplayer.client.widget.GreenButton;
+import ua.bonny.infoplayer.data.CurioSlot;
 import ua.bonny.infoplayer.data.PlayerDetail;
 import ua.bonny.infoplayer.data.PlayerSummary;
 import ua.bonny.infoplayer.network.DetailRequestPayload;
@@ -33,11 +34,11 @@ public final class PlayerDetailScreen extends Screen {
     private final Screen parent;
     private final boolean administrator;
     private final PlayerDetail player;
-    private final boolean startWithInventory;
     private final List<SlotBounds> inventorySlotBounds = new ArrayList<>();
     private RemotePlayer previewPlayer;
     private GreenButton overviewButton;
     private GreenButton inventoryButton;
+    private GreenButton curiosButton;
     private GreenButton refreshButton;
     private Tab tab;
     private int scrollOffset;
@@ -45,24 +46,23 @@ public final class PlayerDetailScreen extends Screen {
     private ItemStack hoveredStack = ItemStack.EMPTY;
 
     public PlayerDetailScreen(Screen parent, boolean administrator, PlayerDetail player) {
-        this(parent, administrator, player, false);
+        this(parent, administrator, player, 0);
     }
 
-    public PlayerDetailScreen(Screen parent, boolean administrator, PlayerDetail player, boolean startWithInventory) {
+    public PlayerDetailScreen(Screen parent, boolean administrator, PlayerDetail player, int selectedTab) {
         super(Component.literal("Данные игрока"));
         this.parent = parent;
         this.administrator = administrator;
         this.player = player;
-        this.startWithInventory = startWithInventory;
-        this.tab = startWithInventory ? Tab.INVENTORY : Tab.OVERVIEW;
+        this.tab = Tab.fromId(selectedTab, !player.curios().isEmpty());
     }
 
     public Screen parentScreen() {
         return parent;
     }
 
-    public boolean inventoryOpen() {
-        return tab == Tab.INVENTORY;
+    public int selectedTab() {
+        return tab.id;
     }
 
     @Override
@@ -83,17 +83,39 @@ public final class PlayerDetailScreen extends Screen {
                 });
         addRenderableWidget(refreshButton);
 
-        int tabsX = Math.max(18, width / 2 - 116);
         int tabsY = compact() ? 76 : 104;
+        boolean hasCurios = !player.curios().isEmpty();
+        int buttonWidth = hasCurios ? 104 : 112;
+        int gap = 8;
+        int buttonCount = hasCurios ? 3 : 2;
+        int tabsWidth = buttonCount * buttonWidth + (buttonCount - 1) * gap;
+        int tabsX = Math.max(18, (width - tabsWidth) / 2);
         overviewButton = new GreenButton(
-                tabsX, tabsY, 112, 26, Component.literal("Обзор"), false, () -> setTab(Tab.OVERVIEW));
+                tabsX, tabsY, buttonWidth, 26, Component.literal("Обзор"), false, () -> setTab(Tab.OVERVIEW));
         inventoryButton = new GreenButton(
-                tabsX + 120, tabsY, 112, 26, Component.literal("Инвентарь"), false, () -> setTab(Tab.INVENTORY));
+                tabsX + buttonWidth + gap,
+                tabsY,
+                buttonWidth,
+                26,
+                Component.literal("Инвентарь"),
+                false,
+                () -> setTab(Tab.INVENTORY));
         addRenderableWidget(overviewButton);
         addRenderableWidget(inventoryButton);
+        if (hasCurios) {
+            curiosButton = new GreenButton(
+                    tabsX + (buttonWidth + gap) * 2,
+                    tabsY,
+                    buttonWidth,
+                    26,
+                    Component.literal("Curios"),
+                    false,
+                    () -> setTab(Tab.CURIOS));
+            addRenderableWidget(curiosButton);
+        }
 
         createPreviewPlayer();
-        setTab(startWithInventory ? Tab.INVENTORY : Tab.OVERVIEW);
+        setTab(tab);
     }
 
     private void createPreviewPlayer() {
@@ -120,6 +142,9 @@ public final class PlayerDetailScreen extends Screen {
         if (overviewButton != null) {
             overviewButton.setSelected(tab == Tab.OVERVIEW);
             inventoryButton.setSelected(tab == Tab.INVENTORY);
+            if (curiosButton != null) {
+                curiosButton.setSelected(tab == Tab.CURIOS);
+            }
         }
     }
 
@@ -133,8 +158,10 @@ public final class PlayerDetailScreen extends Screen {
 
         if (tab == Tab.OVERVIEW) {
             renderOverview(graphics, mouseX, mouseY);
-        } else {
+        } else if (tab == Tab.INVENTORY) {
             renderInventory(graphics, mouseX, mouseY);
+        } else {
+            renderCurios(graphics, mouseX, mouseY);
         }
 
         for (Renderable renderable : renderables) {
@@ -261,7 +288,7 @@ public final class PlayerDetailScreen extends Screen {
             for (int column = 0; column < 9; column++) {
                 int index = 9 + row * 9 + column;
                 renderSlot(graphics, items.get(index), mainX + column * step, mainY + row * step,
-                        mouseX, mouseY, false, index);
+                        mouseX, mouseY, false, index, "", false);
             }
         }
 
@@ -269,7 +296,7 @@ public final class PlayerDetailScreen extends Screen {
         graphics.drawString(font, Component.literal("Панель быстрого доступа"), mainX, hotbarY - 12, MUTED, false);
         for (int column = 0; column < 9; column++) {
             renderSlot(graphics, items.get(column), mainX + column * step, hotbarY,
-                    mouseX, mouseY, column == player.selectedSlot(), column);
+                    mouseX, mouseY, column == player.selectedSlot(), column, "", false);
         }
 
         int dividerX = mainX + inventoryWidth + 16;
@@ -280,11 +307,21 @@ public final class PlayerDetailScreen extends Screen {
         String[] armorLabels = {"Шлем", "Нагрудник", "Поножи", "Ботинки"};
         for (int row = 0; row < armorSlots.length; row++) {
             int y = mainY + row * step;
-            renderSlot(graphics, items.get(armorSlots[row]), equipmentX, y, mouseX, mouseY, false, armorSlots[row]);
+            renderSlot(
+                    graphics,
+                    items.get(armorSlots[row]),
+                    equipmentX,
+                    y,
+                    mouseX,
+                    mouseY,
+                    false,
+                    armorSlots[row],
+                    "",
+                    false);
             graphics.drawString(font, armorLabels[row], equipmentX + SLOT + 7, y + 7, TEXT, false);
         }
         int offhandY = mainY + 4 * step + (compact() ? 7 : 12);
-        renderSlot(graphics, items.get(40), equipmentX, offhandY, mouseX, mouseY, false, 40);
+        renderSlot(graphics, items.get(40), equipmentX, offhandY, mouseX, mouseY, false, 40, "", false);
         graphics.drawString(font, Component.literal("Левая рука"), equipmentX + SLOT + 7, offhandY + 7, TEXT, false);
 
         if (!player.summary().online()) {
@@ -292,6 +329,107 @@ public final class PlayerDetailScreen extends Screen {
             graphics.drawString(font, snapshot, panelX + panelWidth - 14 - font.width(snapshot),
                     panelY + panelHeight - 12, GOLD, false);
         }
+    }
+
+    private void renderCurios(GuiGraphics graphics, int mouseX, int mouseY) {
+        inventorySlotBounds.clear();
+        List<CurioSlot> slots = player.curios();
+        int panelWidth = Math.min(620, width - 72);
+        int panelX = (width - panelWidth) / 2;
+        int panelY = compact() ? 106 : 142;
+        int panelBottom = height - 18;
+        int panelHeight = Math.max(1, panelBottom - panelY);
+        graphics.fill(panelX, panelY, panelX + panelWidth, panelBottom, PANEL);
+        graphics.renderOutline(panelX, panelY, panelWidth, panelHeight, BORDER);
+
+        int occupied = (int) slots.stream().filter(slot -> !slot.stack().isEmpty()).count();
+        graphics.drawString(font, Component.literal("Аксессуары Curios"), panelX + 14, panelY + 12, TEXT, false);
+        String counter = "Надето " + occupied + " из " + slots.size();
+        graphics.drawString(
+                font,
+                counter,
+                panelX + panelWidth - 14 - font.width(counter),
+                panelY + 12,
+                occupied > 0 ? GREEN : MUTED,
+                false);
+
+        String hint = canTakeItems() ? "ЛКМ по аксессуару: забрать" : inventoryActionHint();
+        graphics.drawString(font, hint, panelX + 14, panelY + 28, canTakeItems() ? GREEN : MUTED, false);
+
+        int contentX = panelX + 14;
+        int contentY = panelY + 46;
+        int contentWidth = panelWidth - 28;
+        int gap = 8;
+        int columns = Math.max(1, Math.min(3, (contentWidth + gap) / 170));
+        int cardWidth = (contentWidth - gap * (columns - 1)) / columns;
+        int cardHeight = 38;
+        int rows = (slots.size() + columns - 1) / columns;
+        int viewportHeight = Math.max(0, panelBottom - contentY - 10);
+        maxScroll = Math.max(0, rows * (cardHeight + gap) - gap - viewportHeight);
+        scrollOffset = Math.min(scrollOffset, maxScroll);
+
+        graphics.enableScissor(contentX, contentY, panelX + panelWidth - 14, panelBottom - 8);
+        for (int index = 0; index < slots.size(); index++) {
+            int column = index % columns;
+            int row = index / columns;
+            int x = contentX + column * (cardWidth + gap);
+            int y = contentY + row * (cardHeight + gap) - scrollOffset;
+            if (y + cardHeight < contentY || y > panelBottom - 8) {
+                continue;
+            }
+
+            CurioSlot slot = slots.get(index);
+            graphics.fill(x, y, x + cardWidth, y + cardHeight, 0xFF141E19);
+            graphics.renderOutline(x, y, cardWidth, cardHeight, BORDER);
+            renderSlot(
+                    graphics,
+                    slot.stack(),
+                    x + 8,
+                    y + 9,
+                    mouseX,
+                    mouseY,
+                    false,
+                    slot.index(),
+                    slot.identifier(),
+                    slot.cosmetic());
+
+            String label = curioLabel(slot);
+            label = font.plainSubstrByWidth(label, cardWidth - 42);
+            graphics.drawString(font, label, x + 36, y + 9, TEXT, false);
+            String state = slot.stack().isEmpty() ? "Пусто" : slot.stack().getHoverName().getString();
+            state = font.plainSubstrByWidth(state, cardWidth - 42);
+            graphics.drawString(font, state, x + 36, y + 23, slot.stack().isEmpty() ? MUTED : GREEN, false);
+        }
+        graphics.disableScissor();
+        renderScrollbar(graphics, contentY);
+    }
+
+    private String curioLabel(CurioSlot slot) {
+        String label = switch (slot.identifier()) {
+            case "back" -> "Спина";
+            case "belt" -> "Пояс";
+            case "body" -> "Тело";
+            case "bracelet" -> "Браслет";
+            case "charm" -> "Талисман";
+            case "feet" -> "Ступни";
+            case "hands" -> "Руки";
+            case "head" -> "Голова";
+            case "necklace" -> "Ожерелье";
+            case "ring" -> "Кольцо";
+            default -> readableIdentifier(slot.identifier());
+        };
+        if (slot.index() > 0) {
+            label += " " + (slot.index() + 1);
+        }
+        return slot.cosmetic() ? label + " (вид)" : label;
+    }
+
+    private String readableIdentifier(String identifier) {
+        String value = identifier.replace('_', ' ').trim();
+        if (value.isEmpty()) {
+            return "Аксессуар";
+        }
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
     private void renderSlot(
@@ -302,7 +440,9 @@ public final class PlayerDetailScreen extends Screen {
             int mouseX,
             int mouseY,
             boolean selected,
-            int slotIndex) {
+            int slotIndex,
+            String curiosType,
+            boolean cosmetic) {
         int fill = selected ? 0xFF264D36 : 0xFF111A15;
         int border = selected ? GREEN : 0xFF466052;
         graphics.fill(x, y, x + 20, y + 20, fill);
@@ -322,7 +462,8 @@ public final class PlayerDetailScreen extends Screen {
             }
             hoveredStack = stack;
         }
-        inventorySlotBounds.add(new SlotBounds(x, y, 20, 20, slotIndex, stack));
+        inventorySlotBounds.add(new SlotBounds(
+                x, y, 20, 20, slotIndex, curiosType, cosmetic, stack));
     }
 
     private String inventoryActionHint() {
@@ -388,12 +529,14 @@ public final class PlayerDetailScreen extends Screen {
         if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        if (button == 0 && tab == Tab.INVENTORY && canTakeItems()) {
+        if (button == 0 && (tab == Tab.INVENTORY || tab == Tab.CURIOS) && canTakeItems()) {
             for (SlotBounds bounds : inventorySlotBounds) {
                 if (bounds.contains(mouseX, mouseY) && !bounds.stack.isEmpty()) {
                     PacketDistributor.sendToServer(new TakeItemRequestPayload(
                             player.summary().profile().getId(),
-                            bounds.slotIndex));
+                            bounds.slotIndex,
+                            bounds.curiosType,
+                            bounds.cosmetic));
                     return true;
                 }
             }
@@ -403,7 +546,9 @@ public final class PlayerDetailScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (tab == Tab.OVERVIEW && maxScroll > 0 && mouseY >= (compact() ? 108 : 142)) {
+        if ((tab == Tab.OVERVIEW || tab == Tab.CURIOS)
+                && maxScroll > 0
+                && mouseY >= (compact() ? 108 : 142)) {
             scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) Math.round(verticalAmount * 28)));
             return true;
         }
@@ -420,14 +565,36 @@ public final class PlayerDetailScreen extends Screen {
     }
 
     private enum Tab {
-        OVERVIEW,
-        INVENTORY
+        OVERVIEW(0),
+        INVENTORY(1),
+        CURIOS(2);
+
+        private final int id;
+
+        Tab(int id) {
+            this.id = id;
+        }
+
+        private static Tab fromId(int id, boolean hasCurios) {
+            if (id == CURIOS.id && hasCurios) {
+                return CURIOS;
+            }
+            return id == INVENTORY.id ? INVENTORY : OVERVIEW;
+        }
     }
 
     private record StatLine(String label, String value, int color) {
     }
 
-    private record SlotBounds(int x, int y, int width, int height, int slotIndex, ItemStack stack) {
+    private record SlotBounds(
+            int x,
+            int y,
+            int width,
+            int height,
+            int slotIndex,
+            String curiosType,
+            boolean cosmetic,
+            ItemStack stack) {
         boolean contains(double mouseX, double mouseY) {
             return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
         }

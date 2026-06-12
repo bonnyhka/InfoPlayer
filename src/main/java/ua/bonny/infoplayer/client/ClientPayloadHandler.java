@@ -27,7 +27,7 @@ public final class ClientPayloadHandler {
                     screen.parentScreen(),
                     payload.administrator(),
                     payload.player(),
-                    screen.inventoryOpen()));
+                    screen.selectedTab()));
         } else {
             minecraft.setScreen(new PlayerDetailScreen(minecraft.screen, payload.administrator(), payload.player()));
         }

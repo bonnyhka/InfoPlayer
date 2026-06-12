@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ua.bonny.infoplayer.data.PlayerSummary;
 import ua.bonny.infoplayer.network.DetailResponsePayload;
@@ -41,12 +42,18 @@ public final class PlayerInfoService {
         }
     }
 
-    public static void takeItem(ServerPlayer requester, UUID playerId, int slotIndex) {
+    public static void takeItem(
+            ServerPlayer requester,
+            UUID playerId,
+            int slotIndex,
+            String curiosType,
+            boolean cosmetic) {
         if (!isAdmin(requester)) {
             requester.sendSystemMessage(Component.translatable("message.infoplayer.no_permission_action"));
             return;
         }
-        if (slotIndex < 0 || slotIndex >= 41) {
+        boolean curioSlot = curiosType != null && !curiosType.isBlank();
+        if (slotIndex < 0 || (!curioSlot && slotIndex >= 41)) {
             return;
         }
 
@@ -60,22 +67,37 @@ public final class PlayerInfoService {
             return;
         }
 
-        ItemStack source = target.getInventory().getItem(slotIndex);
+        ItemStack source;
+        if (curioSlot) {
+            if (!ModList.get().isLoaded("curios")) {
+                return;
+            }
+            source = CuriosCompatibility.getStack(target, curiosType, slotIndex, cosmetic);
+        } else {
+            source = target.getInventory().getItem(slotIndex);
+        }
         if (source.isEmpty()) {
             sendDetail(requester, playerId);
             return;
         }
 
-        int originalCount = source.getCount();
-        ItemStack moving = source.copy();
-        moveToInventory(requester, moving);
-        int movedCount = originalCount - moving.getCount();
+        int movedCount = Math.min(source.getCount(), availableInventorySpace(requester, source));
         if (movedCount <= 0) {
             requester.sendSystemMessage(Component.translatable("message.infoplayer.inventory_full"));
             return;
         }
 
-        ItemStack removed = target.getInventory().removeItem(slotIndex, movedCount);
+        ItemStack removed = curioSlot
+                ? CuriosCompatibility.extractStack(
+                        target, curiosType, slotIndex, cosmetic, movedCount, false)
+                : target.getInventory().removeItem(slotIndex, movedCount);
+        if (removed.isEmpty()) {
+            requester.sendSystemMessage(Component.translatable("message.infoplayer.curio_locked"));
+            sendDetail(requester, playerId);
+            return;
+        }
+        ItemStack received = removed.copy();
+        moveToInventory(requester, removed);
         requester.containerMenu.broadcastChanges();
         target.containerMenu.broadcastChanges();
         PlayerDataStore.capture(requester, false);
@@ -84,10 +106,25 @@ public final class PlayerInfoService {
 
         requester.sendSystemMessage(Component.translatable(
                 "message.infoplayer.item_taken",
-                removed.getHoverName(),
-                movedCount,
+                received.getHoverName(),
+                received.getCount(),
                 target.getGameProfile().getName()));
         sendDetail(requester, playerId);
+    }
+
+    private static int availableInventorySpace(ServerPlayer player, ItemStack source) {
+        int available = 0;
+        for (ItemStack existing : player.getInventory().items) {
+            if (existing.isEmpty()) {
+                available += source.getMaxStackSize();
+            } else if (ItemStack.isSameItemSameComponents(existing, source)) {
+                available += Math.max(0, existing.getMaxStackSize() - existing.getCount());
+            }
+            if (available >= source.getCount()) {
+                return source.getCount();
+            }
+        }
+        return available;
     }
 
     private static void moveToInventory(ServerPlayer player, ItemStack remaining) {

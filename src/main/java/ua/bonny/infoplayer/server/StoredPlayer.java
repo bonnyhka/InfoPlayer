@@ -9,6 +9,7 @@ import java.util.UUID;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.world.item.ItemStack;
+import ua.bonny.infoplayer.data.CurioSlot;
 import ua.bonny.infoplayer.data.PlayerDetail;
 import ua.bonny.infoplayer.data.PlayerSummary;
 
@@ -33,6 +34,7 @@ final class StoredPlayer {
     double z;
     int selectedSlot;
     List<String> inventory = new ArrayList<>();
+    List<StoredCurioSlot> curios = new ArrayList<>();
 
     StoredPlayer() {
     }
@@ -73,7 +75,8 @@ final class StoredPlayer {
                 y,
                 z,
                 selectedSlot,
-                decodeInventory(registries));
+                decodeInventory(registries),
+                decodeCurios(registries));
     }
 
     private List<ItemStack> decodeInventory(HolderLookup.Provider registries) {
@@ -89,6 +92,25 @@ final class StoredPlayer {
             result.add(ItemStack.EMPTY);
         }
         return List.copyOf(result.subList(0, 41));
+    }
+
+    private List<CurioSlot> decodeCurios(HolderLookup.Provider registries) {
+        List<CurioSlot> result = new ArrayList<>();
+        for (StoredCurioSlot stored : curios == null ? List.<StoredCurioSlot>of() : curios) {
+            if (stored == null || stored.identifier == null || stored.item == null) {
+                continue;
+            }
+            try {
+                result.add(new CurioSlot(
+                        stored.identifier,
+                        stored.index,
+                        stored.cosmetic,
+                        ItemStack.parseOptional(registries, TagParser.parseTag(stored.item))));
+            } catch (CommandSyntaxException exception) {
+                result.add(new CurioSlot(stored.identifier, stored.index, stored.cosmetic, ItemStack.EMPTY));
+            }
+        }
+        return List.copyOf(result);
     }
 
     private String russianGameMode() {
