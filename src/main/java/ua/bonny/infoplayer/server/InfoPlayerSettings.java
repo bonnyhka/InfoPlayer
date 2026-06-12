@@ -9,10 +9,14 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ua.bonny.infoplayer.data.PrivacyOption;
 
 final class InfoPlayerSettings {
     private static final Logger LOGGER = LoggerFactory.getLogger(InfoPlayerSettings.class);
@@ -39,18 +43,20 @@ final class InfoPlayerSettings {
         }
     }
 
-    static void update(boolean showCoordinatesToPlayers, boolean showInventoryToPlayers) {
-        settings.showCoordinatesToPlayers = showCoordinatesToPlayers;
-        settings.showInventoryToPlayers = showInventoryToPlayers;
+    static void update(UUID playerId, long visibleMask) {
+        if (settings.playerPrivacy == null) {
+            settings.playerPrivacy = new HashMap<>();
+        }
+        settings.playerPrivacy.put(playerId.toString(), PrivacyOption.sanitize(visibleMask));
         save();
     }
 
-    static boolean showCoordinatesToPlayers() {
-        return settings.showCoordinatesToPlayers;
-    }
-
-    static boolean showInventoryToPlayers() {
-        return settings.showInventoryToPlayers;
+    static long visibleMask(UUID playerId) {
+        if (settings.playerPrivacy == null) {
+            settings.playerPrivacy = new HashMap<>();
+        }
+        return PrivacyOption.sanitize(
+                settings.playerPrivacy.getOrDefault(playerId.toString(), PrivacyOption.ALL_VISIBLE));
     }
 
     static void save() {
@@ -74,7 +80,6 @@ final class InfoPlayerSettings {
     }
 
     private static final class SettingsFile {
-        boolean showCoordinatesToPlayers = true;
-        boolean showInventoryToPlayers = true;
+        Map<String, Long> playerPrivacy = new HashMap<>();
     }
 }

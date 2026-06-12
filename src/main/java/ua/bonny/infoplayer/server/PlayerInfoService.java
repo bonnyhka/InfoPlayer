@@ -11,9 +11,12 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ua.bonny.infoplayer.data.PlayerDetail;
+import ua.bonny.infoplayer.data.PlayerListEntry;
 import ua.bonny.infoplayer.data.PlayerSummary;
+import ua.bonny.infoplayer.data.PrivacyOption;
 import ua.bonny.infoplayer.network.DetailResponsePayload;
 import ua.bonny.infoplayer.network.ListResponsePayload;
+import ua.bonny.infoplayer.network.PrivacyChangedPayload;
 
 public final class PlayerInfoService {
     private PlayerInfoService() {
@@ -22,15 +25,22 @@ public final class PlayerInfoService {
     public static void sendList(ServerPlayer requester) {
         MinecraftServer server = requester.getServer();
         server.getPlayerList().getPlayers().forEach(player -> PlayerDataStore.capture(player, false));
-        List<PlayerSummary> players = PlayerDataStore.all().stream()
-                .map(player -> player.summary(server.getPlayerList().getPlayer(player.playerId()) != null))
-                .sorted(Comparator.comparing(PlayerSummary::online).reversed()
-                        .thenComparing(summary -> summary.profile().getName(), String.CASE_INSENSITIVE_ORDER))
+        boolean administrator = isAdmin(requester);
+        List<PlayerListEntry> players = PlayerDataStore.all().stream()
+                .map(player -> {
+                    PlayerSummary summary = player.summary(server.getPlayerList().getPlayer(player.playerId()) != null);
+                    long visibleMask = visibleMask(requester, player.playerId(), administrator);
+                    return new PlayerListEntry(applySummaryVisibility(summary, visibleMask), visibleMask);
+                })
+                .sorted(Comparator
+                        .comparing((PlayerListEntry entry) -> entry.summary().online()).reversed()
+                        .thenComparing(
+                                entry -> entry.summary().profile().getName(),
+                                String.CASE_INSENSITIVE_ORDER))
                 .toList();
         PacketDistributor.sendToPlayer(requester, new ListResponsePayload(
-                isAdmin(requester),
-                InfoPlayerSettings.showCoordinatesToPlayers(),
-                InfoPlayerSettings.showInventoryToPlayers(),
+                administrator,
+                InfoPlayerSettings.visibleMask(requester.getUUID()),
                 players));
     }
 
@@ -42,37 +52,21 @@ public final class PlayerInfoService {
                 : PlayerDataStore.get(playerId);
         if (stored != null) {
             boolean administrator = isAdmin(requester);
-            boolean ownProfile = requester.getUUID().equals(playerId);
-            boolean coordinatesVisible = administrator
-                    || ownProfile
-                    || InfoPlayerSettings.showCoordinatesToPlayers();
-            boolean inventoryVisible = administrator
-                    || ownProfile
-                    || InfoPlayerSettings.showInventoryToPlayers();
+            long visibleMask = visibleMask(requester, playerId, administrator);
             PlayerDetail detail = applyVisibility(
                     stored.detail(onlinePlayer != null, server.registryAccess()),
-                    coordinatesVisible,
-                    inventoryVisible);
+                    visibleMask);
             PacketDistributor.sendToPlayer(requester,
                     new DetailResponsePayload(
                             administrator,
-                            coordinatesVisible,
-                            inventoryVisible,
+                            visibleMask,
                             detail));
         }
     }
 
-    public static void updateSettings(
-            ServerPlayer requester,
-            boolean showCoordinatesToPlayers,
-            boolean showInventoryToPlayers) {
-        if (!isAdmin(requester)) {
-            requester.sendSystemMessage(Component.translatable("message.infoplayer.no_permission_settings"));
-            return;
-        }
-        InfoPlayerSettings.update(showCoordinatesToPlayers, showInventoryToPlayers);
-        requester.sendSystemMessage(Component.translatable("message.infoplayer.settings_saved"));
-        sendList(requester);
+    public static void updateSettings(ServerPlayer requester, long visibleMask) {
+        InfoPlayerSettings.update(requester.getUUID(), visibleMask);
+        PacketDistributor.sendToAllPlayers(new PrivacyChangedPayload(requester.getUUID()));
     }
 
     public static void takeItem(
@@ -160,11 +154,28 @@ public final class PlayerInfoService {
         return available;
     }
 
-    private static PlayerDetail applyVisibility(
-            PlayerDetail detail,
-            boolean coordinatesVisible,
-            boolean inventoryVisible) {
+    private static long visibleMask(ServerPlayer requester, UUID targetId, boolean administrator) {
+        return administrator || requester.getUUID().equals(targetId)
+                ? PrivacyOption.ALL_VISIBLE
+                : InfoPlayerSettings.visibleMask(targetId);
+    }
+
+    private static PlayerSummary applySummaryVisibility(PlayerSummary summary, long visibleMask) {
+        return new PlayerSummary(
+                summary.profile(),
+                PrivacyOption.ONLINE_STATUS.visible(visibleMask) && summary.online(),
+                PrivacyOption.LAST_ACTIVITY.visible(visibleMask) ? summary.lastSeen() : 0,
+                PrivacyOption.EXPERIENCE.visible(visibleMask) ? summary.experienceLevel() : 0,
+                PrivacyOption.EXPERIENCE.visible(visibleMask) ? summary.totalExperience() : 0,
+                PrivacyOption.PLAY_TIME.visible(visibleMask) ? summary.playTimeTicks() : 0,
+                PrivacyOption.ADVANCEMENTS.visible(visibleMask) ? summary.advancementsDone() : 0,
+                PrivacyOption.ADVANCEMENTS.visible(visibleMask) ? summary.advancementsTotal() : 0);
+    }
+
+    private static PlayerDetail applyVisibility(PlayerDetail detail, long visibleMask) {
         List<ItemStack> inventory = detail.inventory();
+        boolean inventoryVisible = PrivacyOption.INVENTORY.visible(visibleMask);
+        boolean curiosVisible = PrivacyOption.CURIOS.visible(visibleMask);
         if (!inventoryVisible) {
             List<ItemStack> hiddenInventory = new ArrayList<>(41);
             for (int index = 0; index < 41; index++) {
@@ -173,18 +184,18 @@ public final class PlayerInfoService {
             inventory = List.copyOf(hiddenInventory);
         }
         return new PlayerDetail(
-                detail.summary(),
-                detail.firstSeen(),
-                detail.health(),
-                detail.foodLevel(),
-                detail.gameMode(),
-                detail.dimension(),
-                coordinatesVisible ? detail.x() : 0,
-                coordinatesVisible ? detail.y() : 0,
-                coordinatesVisible ? detail.z() : 0,
+                applySummaryVisibility(detail.summary(), visibleMask),
+                PrivacyOption.FIRST_SEEN.visible(visibleMask) ? detail.firstSeen() : 0,
+                PrivacyOption.HEALTH.visible(visibleMask) ? detail.health() : 0,
+                PrivacyOption.FOOD.visible(visibleMask) ? detail.foodLevel() : 0,
+                PrivacyOption.GAME_MODE.visible(visibleMask) ? detail.gameMode() : "",
+                PrivacyOption.DIMENSION.visible(visibleMask) ? detail.dimension() : "",
+                PrivacyOption.COORDINATES.visible(visibleMask) ? detail.x() : 0,
+                PrivacyOption.COORDINATES.visible(visibleMask) ? detail.y() : 0,
+                PrivacyOption.COORDINATES.visible(visibleMask) ? detail.z() : 0,
                 inventoryVisible ? detail.selectedSlot() : 0,
                 inventory,
-                inventoryVisible ? detail.curios() : List.of());
+                curiosVisible ? detail.curios() : List.of());
     }
 
     private static void moveToInventory(ServerPlayer player, ItemStack remaining) {

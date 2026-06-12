@@ -14,7 +14,7 @@ public final class InfoPlayerNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("5");
+        PayloadRegistrar registrar = event.registrar("6");
         registrar.playToServer(ListRequestPayload.TYPE, ListRequestPayload.STREAM_CODEC, (payload, context) -> {
             if (context.player() instanceof ServerPlayer player) {
                 PlayerInfoService.sendList(player);
@@ -41,10 +41,13 @@ public final class InfoPlayerNetwork {
             if (context.player() instanceof ServerPlayer player) {
                 PlayerInfoService.updateSettings(
                         player,
-                        payload.showCoordinatesToPlayers(),
-                        payload.showInventoryToPlayers());
+                        payload.visibleMask());
             }
         });
+        registrar.playToClient(
+                PrivacyChangedPayload.TYPE,
+                PrivacyChangedPayload.STREAM_CODEC,
+                InfoPlayerNetwork::handlePrivacyChanged);
     }
 
     private static void handleList(ListResponsePayload payload, IPayloadContext context) {
@@ -56,6 +59,12 @@ public final class InfoPlayerNetwork {
     private static void handleDetail(DetailResponsePayload payload, IPayloadContext context) {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             ClientPayloadHandler.handleDetail(payload, context);
+        }
+    }
+
+    private static void handlePrivacyChanged(PrivacyChangedPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            ClientPayloadHandler.handlePrivacyChanged(payload, context);
         }
     }
 }

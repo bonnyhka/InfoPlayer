@@ -9,8 +9,7 @@ import ua.bonny.infoplayer.data.PlayerDetail;
 
 public record DetailResponsePayload(
         boolean administrator,
-        boolean coordinatesVisible,
-        boolean inventoryVisible,
+        long visibleMask,
         PlayerDetail player) implements CustomPacketPayload {
     public static final Type<DetailResponsePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(InfoPlayerMod.MOD_ID, "detail_response"));
@@ -18,14 +17,12 @@ public record DetailResponsePayload(
             StreamCodec.of(
                     (buffer, payload) -> {
                         buffer.writeBoolean(payload.administrator);
-                        buffer.writeBoolean(payload.coordinatesVisible);
-                        buffer.writeBoolean(payload.inventoryVisible);
+                        buffer.writeVarLong(payload.visibleMask);
                         payload.player.encode(buffer);
                     },
                     buffer -> new DetailResponsePayload(
                             buffer.readBoolean(),
-                            buffer.readBoolean(),
-                            buffer.readBoolean(),
+                            buffer.readVarLong(),
                             PlayerDetail.decode(buffer)));
 
     @Override

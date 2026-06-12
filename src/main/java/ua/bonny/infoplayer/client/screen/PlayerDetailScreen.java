@@ -2,6 +2,7 @@ package ua.bonny.infoplayer.client.screen;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
@@ -16,6 +17,7 @@ import ua.bonny.infoplayer.client.widget.GreenButton;
 import ua.bonny.infoplayer.data.CurioSlot;
 import ua.bonny.infoplayer.data.PlayerDetail;
 import ua.bonny.infoplayer.data.PlayerSummary;
+import ua.bonny.infoplayer.data.PrivacyOption;
 import ua.bonny.infoplayer.network.DetailRequestPayload;
 import ua.bonny.infoplayer.network.TakeItemRequestPayload;
 
@@ -33,8 +35,7 @@ public final class PlayerDetailScreen extends Screen {
 
     private final Screen parent;
     private final boolean administrator;
-    private final boolean coordinatesVisible;
-    private final boolean inventoryVisible;
+    private final long visibleMask;
     private final PlayerDetail player;
     private final List<SlotBounds> inventorySlotBounds = new ArrayList<>();
     private RemotePlayer previewPlayer;
@@ -50,26 +51,26 @@ public final class PlayerDetailScreen extends Screen {
     public PlayerDetailScreen(
             Screen parent,
             boolean administrator,
-            boolean coordinatesVisible,
-            boolean inventoryVisible,
+            long visibleMask,
             PlayerDetail player) {
-        this(parent, administrator, coordinatesVisible, inventoryVisible, player, 0);
+        this(parent, administrator, visibleMask, player, 0);
     }
 
     public PlayerDetailScreen(
             Screen parent,
             boolean administrator,
-            boolean coordinatesVisible,
-            boolean inventoryVisible,
+            long visibleMask,
             PlayerDetail player,
             int selectedTab) {
         super(Component.literal("Данные игрока"));
         this.parent = parent;
         this.administrator = administrator;
-        this.coordinatesVisible = coordinatesVisible;
-        this.inventoryVisible = inventoryVisible;
+        this.visibleMask = visibleMask;
         this.player = player;
-        this.tab = Tab.fromId(selectedTab, inventoryVisible, !player.curios().isEmpty());
+        this.tab = Tab.fromId(
+                selectedTab,
+                visible(PrivacyOption.INVENTORY),
+                visible(PrivacyOption.CURIOS) && !player.curios().isEmpty());
     }
 
     public Screen parentScreen() {
@@ -78,6 +79,10 @@ public final class PlayerDetailScreen extends Screen {
 
     public int selectedTab() {
         return tab.id;
+    }
+
+    public UUID playerId() {
+        return player.summary().profile().getId();
     }
 
     @Override
@@ -99,18 +104,20 @@ public final class PlayerDetailScreen extends Screen {
         addRenderableWidget(refreshButton);
 
         int tabsY = compact() ? 76 : 104;
-        boolean hasCurios = inventoryVisible && !player.curios().isEmpty();
-        int buttonWidth = hasCurios ? 104 : 112;
+        boolean inventoryVisible = visible(PrivacyOption.INVENTORY);
+        boolean hasCurios = visible(PrivacyOption.CURIOS) && !player.curios().isEmpty();
         int gap = 8;
-        int buttonCount = inventoryVisible ? (hasCurios ? 3 : 2) : 1;
+        int buttonCount = 1 + (inventoryVisible ? 1 : 0) + (hasCurios ? 1 : 0);
+        int buttonWidth = buttonCount == 3 ? 104 : 112;
         int tabsWidth = buttonCount * buttonWidth + (buttonCount - 1) * gap;
         int tabsX = Math.max(18, (width - tabsWidth) / 2);
+        int nextTabX = tabsX + buttonWidth + gap;
         overviewButton = new GreenButton(
                 tabsX, tabsY, buttonWidth, 26, Component.literal("Обзор"), false, () -> setTab(Tab.OVERVIEW));
         addRenderableWidget(overviewButton);
         if (inventoryVisible) {
             inventoryButton = new GreenButton(
-                    tabsX + buttonWidth + gap,
+                    nextTabX,
                     tabsY,
                     buttonWidth,
                     26,
@@ -118,10 +125,11 @@ public final class PlayerDetailScreen extends Screen {
                     false,
                     () -> setTab(Tab.INVENTORY));
             addRenderableWidget(inventoryButton);
+            nextTabX += buttonWidth + gap;
         }
         if (hasCurios) {
             curiosButton = new GreenButton(
-                    tabsX + (buttonWidth + gap) * 2,
+                    nextTabX,
                     tabsY,
                     buttonWidth,
                     26,
@@ -199,7 +207,10 @@ public final class PlayerDetailScreen extends Screen {
         int cardHeight = compact() ? 24 : 42;
         graphics.fill(cardX, cardY, cardX + cardWidth, cardY + cardHeight, PANEL);
         graphics.renderOutline(cardX, cardY, cardWidth, cardHeight, BORDER);
-        graphics.fill(cardX, cardY, cardX + 4, cardY + cardHeight, summary.online() ? GREEN : 0xFFE35D6A);
+        int statusColor = visible(PrivacyOption.ONLINE_STATUS)
+                ? (summary.online() ? GREEN : 0xFFE35D6A)
+                : BORDER;
+        graphics.fill(cardX, cardY, cardX + 4, cardY + cardHeight, statusColor);
         int faceSize = compact() ? 18 : 32;
         PlayerFaceRenderer.draw(
                 graphics,
@@ -210,10 +221,24 @@ public final class PlayerDetailScreen extends Screen {
         int textX = cardX + (compact() ? 38 : 54);
         graphics.drawString(font, summary.profile().getName(), textX, cardY + (compact() ? 8 : 7), TEXT, false);
         if (!compact()) {
-            graphics.drawString(font, ClientFormat.lastSeen(summary.online(), summary.lastSeen()), textX,
-                    cardY + 23, summary.online() ? GREEN : 0xFFE35D6A, false);
-            String rightText = "Уровень " + summary.experienceLevel() + "  |  " + player.gameMode();
-            graphics.drawString(font, rightText, cardX + cardWidth - 12 - font.width(rightText), cardY + 17, MUTED, false);
+            graphics.drawString(font, activityText(summary), textX, cardY + 23, statusColor, false);
+            List<String> rightParts = new ArrayList<>();
+            if (visible(PrivacyOption.EXPERIENCE)) {
+                rightParts.add("Уровень " + summary.experienceLevel());
+            }
+            if (visible(PrivacyOption.GAME_MODE)) {
+                rightParts.add(player.gameMode());
+            }
+            if (!rightParts.isEmpty()) {
+                String rightText = String.join("  |  ", rightParts);
+                graphics.drawString(
+                        font,
+                        rightText,
+                        cardX + cardWidth - 12 - font.width(rightText),
+                        cardY + 17,
+                        MUTED,
+                        false);
+            }
         }
     }
 
@@ -520,23 +545,59 @@ public final class PlayerDetailScreen extends Screen {
     private List<StatLine> stats() {
         PlayerSummary summary = player.summary();
         List<StatLine> stats = new ArrayList<>();
-        stats.add(line("Уровень", Integer.toString(summary.experienceLevel()), GOLD));
-        stats.add(line("Всего опыта", Integer.toString(summary.totalExperience()), GOLD));
-        stats.add(line("Достижения", summary.advancementsDone() + " / " + summary.advancementsTotal(), GREEN));
-        stats.add(line("Время на сервере", ClientFormat.playTime(summary.playTimeTicks()).getString(), TEXT));
-        stats.add(line("Здоровье", String.format("%.1f / 20", player.health()), 0xFFE46A72));
-        stats.add(line("Голод", player.foodLevel() + " / 20", 0xFFF1A95B));
-        stats.add(line("Режим игры", player.gameMode(), TEXT));
-        stats.add(line("Измерение", player.dimension(), 0xFF72B8F2));
-        if (coordinatesVisible) {
+        if (visible(PrivacyOption.EXPERIENCE)) {
+            stats.add(line("Уровень", Integer.toString(summary.experienceLevel()), GOLD));
+            stats.add(line("Всего опыта", Integer.toString(summary.totalExperience()), GOLD));
+        }
+        if (visible(PrivacyOption.ADVANCEMENTS)) {
+            stats.add(line("Достижения", summary.advancementsDone() + " / " + summary.advancementsTotal(), GREEN));
+        }
+        if (visible(PrivacyOption.PLAY_TIME)) {
+            stats.add(line("Время на сервере", ClientFormat.playTime(summary.playTimeTicks()).getString(), TEXT));
+        }
+        if (visible(PrivacyOption.HEALTH)) {
+            stats.add(line("Здоровье", String.format("%.1f / 20", player.health()), 0xFFE46A72));
+        }
+        if (visible(PrivacyOption.FOOD)) {
+            stats.add(line("Голод", player.foodLevel() + " / 20", 0xFFF1A95B));
+        }
+        if (visible(PrivacyOption.GAME_MODE)) {
+            stats.add(line("Режим игры", player.gameMode(), TEXT));
+        }
+        if (visible(PrivacyOption.DIMENSION)) {
+            stats.add(line("Измерение", player.dimension(), 0xFF72B8F2));
+        }
+        if (visible(PrivacyOption.COORDINATES)) {
             stats.add(line("Координаты", String.format("%.1f, %.1f, %.1f", player.x(), player.y(), player.z()), TEXT));
         }
-        if (!inventoryVisible) {
-            stats.add(line("Инвентарь", "Скрыт настройками сервера", MUTED));
+        if (visible(PrivacyOption.FIRST_SEEN)) {
+            stats.add(line("Первый вход", ClientFormat.date(player.firstSeen()), TEXT));
         }
-        stats.add(line("Первый вход", ClientFormat.date(player.firstSeen()), TEXT));
-        stats.add(line("Последняя активность", ClientFormat.date(summary.lastSeen()), TEXT));
+        if (visible(PrivacyOption.LAST_ACTIVITY)) {
+            stats.add(line("Последняя активность", ClientFormat.date(summary.lastSeen()), TEXT));
+        }
+        if (stats.isEmpty()) {
+            stats.add(line("Приватность", "Игрок скрыл подробные данные", MUTED));
+        }
         return stats;
+    }
+
+    private String activityText(PlayerSummary summary) {
+        boolean statusVisible = visible(PrivacyOption.ONLINE_STATUS);
+        boolean activityVisible = visible(PrivacyOption.LAST_ACTIVITY);
+        if (statusVisible && summary.online()) {
+            return "В сети";
+        }
+        if (activityVisible && summary.lastSeen() > 0) {
+            return statusVisible
+                    ? ClientFormat.lastSeen(false, summary.lastSeen()).getString()
+                    : "Активность: " + ClientFormat.date(summary.lastSeen());
+        }
+        return statusVisible ? "Не в сети" : "Статус скрыт";
+    }
+
+    private boolean visible(PrivacyOption option) {
+        return option.visible(visibleMask);
     }
 
     private StatLine line(String label, String value, int color) {
@@ -600,7 +661,7 @@ public final class PlayerDetailScreen extends Screen {
         }
 
         private static Tab fromId(int id, boolean inventoryVisible, boolean hasCurios) {
-            if (id == CURIOS.id && inventoryVisible && hasCurios) {
+            if (id == CURIOS.id && hasCurios) {
                 return CURIOS;
             }
             return id == INVENTORY.id && inventoryVisible ? INVENTORY : OVERVIEW;

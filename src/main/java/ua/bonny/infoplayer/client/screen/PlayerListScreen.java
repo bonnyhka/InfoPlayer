@@ -12,7 +12,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ua.bonny.infoplayer.client.ClientFormat;
+import ua.bonny.infoplayer.data.PlayerListEntry;
 import ua.bonny.infoplayer.data.PlayerSummary;
+import ua.bonny.infoplayer.data.PrivacyOption;
 import ua.bonny.infoplayer.network.DetailRequestPayload;
 import ua.bonny.infoplayer.network.ListRequestPayload;
 import ua.bonny.infoplayer.client.widget.GreenButton;
@@ -32,12 +34,11 @@ public final class PlayerListScreen extends Screen {
     private static final int GAP = 10;
     private static final int CONTENT_TOP = 102;
 
-    private final List<PlayerSummary> allPlayers = new ArrayList<>();
-    private final List<PlayerSummary> filteredPlayers = new ArrayList<>();
+    private final List<PlayerListEntry> allPlayers = new ArrayList<>();
+    private final List<PlayerListEntry> filteredPlayers = new ArrayList<>();
     private final List<CardBounds> cardBounds = new ArrayList<>();
     private boolean administrator;
-    private boolean showCoordinatesToPlayers;
-    private boolean showInventoryToPlayers;
+    private long ownVisibleMask;
     private EditBox searchBox;
     private GreenButton refreshButton;
     private GreenButton settingsButton;
@@ -46,25 +47,18 @@ public final class PlayerListScreen extends Screen {
 
     public PlayerListScreen(
             boolean administrator,
-            boolean showCoordinatesToPlayers,
-            boolean showInventoryToPlayers,
-            List<PlayerSummary> players) {
+            long ownVisibleMask,
+            List<PlayerListEntry> players) {
         super(Component.translatable("screen.infoplayer.title"));
-        updatePlayers(
-                administrator,
-                showCoordinatesToPlayers,
-                showInventoryToPlayers,
-                players);
+        updatePlayers(administrator, ownVisibleMask, players);
     }
 
     public void updatePlayers(
             boolean administrator,
-            boolean showCoordinatesToPlayers,
-            boolean showInventoryToPlayers,
-            List<PlayerSummary> players) {
+            long ownVisibleMask,
+            List<PlayerListEntry> players) {
         this.administrator = administrator;
-        this.showCoordinatesToPlayers = showCoordinatesToPlayers;
-        this.showInventoryToPlayers = showInventoryToPlayers;
+        this.ownVisibleMask = ownVisibleMask;
         allPlayers.clear();
         allPlayers.addAll(players);
         applyFilter(searchBox == null ? "" : searchBox.getValue());
@@ -75,10 +69,10 @@ public final class PlayerListScreen extends Screen {
 
     @Override
     protected void init() {
-        boolean compactAdminToolbar = administrator && width < 500;
-        int fieldWidth = compactAdminToolbar
+        boolean compactToolbar = width < 500;
+        int fieldWidth = compactToolbar
                 ? Math.max(100, width - 48)
-                : Math.min(250, Math.max(100, width - (administrator ? 350 : 230)));
+                : Math.min(250, Math.max(100, width - 350));
         searchBox = new EditBox(font, 82, 66, fieldWidth - 52, 18, Component.literal("Имя игрока"));
         searchBox.setHint(Component.literal("Имя игрока..."));
         searchBox.setMaxLength(32);
@@ -88,8 +82,8 @@ public final class PlayerListScreen extends Screen {
         addRenderableWidget(searchBox);
 
         refreshButton = new GreenButton(
-                compactAdminToolbar ? 140 : width - 132,
-                compactAdminToolbar ? 94 : 56,
+                compactToolbar ? 140 : width - 132,
+                compactToolbar ? 94 : 56,
                 108,
                 30,
                 Component.translatable("screen.infoplayer.refresh"),
@@ -100,28 +94,23 @@ public final class PlayerListScreen extends Screen {
         });
         addRenderableWidget(refreshButton);
 
-        if (administrator) {
-            settingsButton = new GreenButton(
-                    compactAdminToolbar ? 24 : width - 248,
-                    compactAdminToolbar ? 94 : 56,
-                    108,
-                    30,
-                    Component.literal("Настройки"),
-                    false,
-                    () -> minecraft.setScreen(new SettingsScreen(
-                            this,
-                            showCoordinatesToPlayers,
-                            showInventoryToPlayers)));
-            addRenderableWidget(settingsButton);
-        }
+        settingsButton = new GreenButton(
+                compactToolbar ? 24 : width - 248,
+                compactToolbar ? 94 : 56,
+                108,
+                30,
+                Component.literal("Приватность"),
+                false,
+                () -> minecraft.setScreen(new SettingsScreen(this, ownVisibleMask)));
+        addRenderableWidget(settingsButton);
     }
 
     private void applyFilter(String query) {
         String normalized = query.toLowerCase(Locale.ROOT).trim();
         filteredPlayers.clear();
         filteredPlayers.addAll(allPlayers.stream()
-                .filter(player -> normalized.isEmpty()
-                        || player.profile().getName().toLowerCase(Locale.ROOT).contains(normalized))
+                .filter(entry -> normalized.isEmpty()
+                        || entry.summary().profile().getName().toLowerCase(Locale.ROOT).contains(normalized))
                 .toList());
         scrollOffset = 0;
     }
@@ -134,11 +123,17 @@ public final class PlayerListScreen extends Screen {
         graphics.drawString(font, title, 24, 10, TEXT, false);
         graphics.drawString(font, Component.literal("Статистика игроков сервера"), 24, 24, MUTED, false);
 
-        long online = allPlayers.stream().filter(PlayerSummary::online).count();
+        long online = allPlayers.stream()
+                .filter(entry -> PrivacyOption.ONLINE_STATUS.visible(entry.visibleMask()))
+                .map(PlayerListEntry::summary)
+                .filter(PlayerSummary::online)
+                .count();
         Component counter = Component.translatable("screen.infoplayer.counter", online, allPlayers.size());
         graphics.drawString(font, counter, width - 24 - font.width(counter), 17, TEXT, false);
 
-        int fieldWidth = Math.min(250, Math.max(100, width - 230));
+        int fieldWidth = width < 500
+                ? Math.max(100, width - 48)
+                : Math.min(250, Math.max(100, width - 350));
         graphics.fill(24, 56, 24 + fieldWidth, 86, CARD);
         graphics.renderOutline(24, 56, fieldWidth, 30, searchBox.isFocused() ? GREEN : BORDER);
         graphics.fill(24, 56, 28, 86, searchBox.isFocused() ? GREEN : 0xFF3C6650);
@@ -176,32 +171,46 @@ public final class PlayerListScreen extends Screen {
                 continue;
             }
 
-            PlayerSummary player = filteredPlayers.get(index);
+            PlayerListEntry entry = filteredPlayers.get(index);
+            PlayerSummary player = entry.summary();
+            long visibleMask = entry.visibleMask();
             boolean hovered = mouseX >= x && mouseX < x + cardWidth && mouseY >= y
                     && mouseY < y + CARD_HEIGHT && mouseY >= contentTop;
             graphics.fill(x, y, x + cardWidth, y + CARD_HEIGHT, hovered ? CARD_HOVER : CARD);
             graphics.renderOutline(x, y, cardWidth, CARD_HEIGHT, hovered ? GREEN : BORDER);
-            graphics.fill(x, y, x + 3, y + CARD_HEIGHT, player.online() ? GREEN : OFFLINE);
+            int statusColor = PrivacyOption.ONLINE_STATUS.visible(visibleMask)
+                    ? (player.online() ? GREEN : OFFLINE)
+                    : BORDER;
+            graphics.fill(x, y, x + 3, y + CARD_HEIGHT, statusColor);
 
             drawPlayerHead(graphics, player.profile(), x + 12, y + 14, 36);
             graphics.drawString(font, player.profile().getName(), x + 58, y + 12, TEXT, false);
-            graphics.drawString(font, ClientFormat.lastSeen(player.online(), player.lastSeen()), x + 58, y + 27,
-                    player.online() ? GREEN : OFFLINE, false);
+            String activity = activityText(player, visibleMask);
+            graphics.drawString(font, activity, x + 58, y + 27, statusColor, false);
 
-            Component level = Component.translatable("screen.infoplayer.level.short", player.experienceLevel());
-            graphics.drawString(font, level, x + 58, y + 45, GOLD, false);
-            Component advancements = Component.literal(
-                    "Достижения: " + player.advancementsDone() + "/" + player.advancementsTotal());
+            Component level = PrivacyOption.EXPERIENCE.visible(visibleMask)
+                    ? Component.translatable("screen.infoplayer.level.short", player.experienceLevel())
+                    : Component.literal("Уровень скрыт");
+            graphics.drawString(
+                    font,
+                    level,
+                    x + 58,
+                    y + 45,
+                    PrivacyOption.EXPERIENCE.visible(visibleMask) ? GOLD : MUTED,
+                    false);
+            Component advancements = PrivacyOption.ADVANCEMENTS.visible(visibleMask)
+                    ? Component.literal("Достижения: " + player.advancementsDone() + "/" + player.advancementsTotal())
+                    : Component.literal("Достижения скрыты");
             graphics.drawString(font, advancements, x + cardWidth - 12 - font.width(advancements), y + 45, MUTED, false);
             int progressX = x + 58;
             int progressY = y + 65;
             int progressWidth = Math.max(20, cardWidth - 70);
-            float progress = player.advancementsTotal() == 0
+            float progress = !PrivacyOption.ADVANCEMENTS.visible(visibleMask) || player.advancementsTotal() == 0
                     ? 0
                     : (float) player.advancementsDone() / player.advancementsTotal();
             graphics.fill(progressX, progressY, progressX + progressWidth, progressY + 5, 0xFF2C3931);
             graphics.fill(progressX, progressY, progressX + Math.round(progressWidth * progress), progressY + 5, GREEN);
-            cardBounds.add(new CardBounds(x, y, cardWidth, CARD_HEIGHT, player));
+            cardBounds.add(new CardBounds(x, y, cardWidth, CARD_HEIGHT, entry));
         }
         graphics.disableScissor();
 
@@ -227,7 +236,8 @@ public final class PlayerListScreen extends Screen {
         if (button == 0) {
             for (CardBounds bounds : cardBounds) {
                 if (bounds.contains(mouseX, mouseY)) {
-                    PacketDistributor.sendToServer(new DetailRequestPayload(bounds.player.profile().getId()));
+                    PacketDistributor.sendToServer(new DetailRequestPayload(
+                            bounds.player.summary().profile().getId()));
                     return true;
                 }
             }
@@ -249,13 +259,27 @@ public final class PlayerListScreen extends Screen {
         return false;
     }
 
-    private record CardBounds(int x, int y, int width, int height, PlayerSummary player) {
+    private String activityText(PlayerSummary player, long visibleMask) {
+        boolean statusVisible = PrivacyOption.ONLINE_STATUS.visible(visibleMask);
+        boolean activityVisible = PrivacyOption.LAST_ACTIVITY.visible(visibleMask);
+        if (statusVisible && player.online()) {
+            return "В сети";
+        }
+        if (activityVisible && player.lastSeen() > 0) {
+            return statusVisible
+                    ? ClientFormat.lastSeen(false, player.lastSeen()).getString()
+                    : "Активность: " + ClientFormat.date(player.lastSeen());
+        }
+        return statusVisible ? "Не в сети" : "Статус скрыт";
+    }
+
+    private record CardBounds(int x, int y, int width, int height, PlayerListEntry player) {
         boolean contains(double mouseX, double mouseY) {
             return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
         }
     }
 
     private int contentTop() {
-        return administrator && width < 500 ? 138 : CONTENT_TOP;
+        return width < 500 ? 138 : CONTENT_TOP;
     }
 }
